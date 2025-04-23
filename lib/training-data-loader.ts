@@ -1,0 +1,205 @@
+import fs from "fs"
+import path from "path"
+import { loadTrainingDocuments, TrainingDocument, createMockTrainingData } from "./simple-pdf-processor"
+
+// This module should only be used on the server side
+
+// Load training data from processed documents
+export async function loadTrainingData() {
+  try {
+    // Load processed training documents
+    const documents = await loadTrainingDocuments()
+
+    // Convert documents to training data format
+    const trainingData = {
+      objectionHandling: extractObjectionHandling(documents),
+      closingTechniques: extractClosingTechniques(documents),
+      discoveryQuestions: extractDiscoveryQuestions(documents),
+      valuePropositions: extractValuePropositions(documents),
+      salesScripts: extractSalesScripts(documents),
+      // Add the full documents for context
+      documents: documents.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        category: doc.category,
+        summary: summarizeDocument(doc.content)
+      }))
+    }
+
+    return trainingData
+  } catch (error) {
+    console.error("Error loading training data:", error)
+    return {
+      objectionHandling: [],
+      closingTechniques: [],
+      discoveryQuestions: [],
+      valuePropositions: [],
+      salesScripts: [],
+      documents: []
+    }
+  }
+}
+
+// Helper functions to extract specific data from documents
+function extractObjectionHandling(documents: TrainingDocument[]) {
+  const objectionPatterns = [
+    "objection",
+    "concern",
+    "hesitation",
+    "pushback",
+    "not interested",
+    "too expensive",
+    "need to think",
+    "talk to",
+    "competitor"
+  ]
+
+  return extractRelevantContent(documents, objectionPatterns, 'objection handling')
+}
+
+function extractClosingTechniques(documents: TrainingDocument[]) {
+  const closingPatterns = [
+    "closing",
+    "close the sale",
+    "ask for the business",
+    "commitment",
+    "next steps",
+    "sign up",
+    "move forward",
+    "decision"
+  ]
+
+  return extractRelevantContent(documents, closingPatterns, 'closing techniques')
+}
+
+function extractDiscoveryQuestions(documents: TrainingDocument[]) {
+  const discoveryPatterns = [
+    "discovery",
+    "question",
+    "tell me about",
+    "how do you",
+    "what is your",
+    "challenge",
+    "pain point",
+    "goal",
+    "objective"
+  ]
+
+  return extractRelevantContent(documents, discoveryPatterns, 'discovery questions')
+}
+
+function extractValuePropositions(documents: TrainingDocument[]) {
+  const valuePatterns = [
+    "value",
+    "benefit",
+    "solution",
+    "result",
+    "outcome",
+    "roi",
+    "return on investment",
+    "save",
+    "improve",
+    "increase"
+  ]
+
+  return extractRelevantContent(documents, valuePatterns, 'value propositions')
+}
+
+function extractSalesScripts(documents: TrainingDocument[]) {
+  // Get documents that are categorized as scripts
+  const scriptDocuments = documents.filter(doc =>
+    doc.category === 'scripts' ||
+    doc.title.toLowerCase().includes('script')
+  )
+
+  return scriptDocuments.map(doc => ({
+    id: doc.id,
+    title: doc.title,
+    content: summarizeDocument(doc.content, 500),
+    source: doc.source
+  }))
+}
+
+// Extract relevant content from documents based on patterns
+function extractRelevantContent(documents: TrainingDocument[], patterns: string[], type: string) {
+  const relevantContent = []
+
+  for (const doc of documents) {
+    const paragraphs = doc.content.split('\n\n')
+
+    for (const paragraph of paragraphs) {
+      // Check if paragraph contains any of the patterns
+      if (patterns.some(pattern => paragraph.toLowerCase().includes(pattern))) {
+        relevantContent.push({
+          id: `${doc.id}_${relevantContent.length}`,
+          content: paragraph,
+          source: doc.title,
+          type
+        })
+      }
+    }
+  }
+
+  return relevantContent
+}
+
+// Create a summary of document content
+function summarizeDocument(content: string, maxLength: number = 200): string {
+  if (content.length <= maxLength) {
+    return content
+  }
+
+  // Get the first few sentences up to maxLength
+  const truncated = content.substring(0, maxLength)
+  const lastPeriod = truncated.lastIndexOf('.')
+
+  if (lastPeriod > 0) {
+    return truncated.substring(0, lastPeriod + 1) + ' ...'
+  }
+
+  return truncated + ' ...'
+}
+
+// Add custom training data
+export async function addCustomTrainingData(category: string, data: any) {
+  try {
+    // Path to your training data directory
+    const dataPath = path.join(process.cwd(), "data", "training-data.json")
+
+    // Read and parse the existing JSON file
+    const rawData = fs.readFileSync(dataPath, "utf8")
+    const trainingData = JSON.parse(rawData)
+
+    // Add or update the data in the specified category
+    if (Array.isArray(trainingData[category])) {
+      // If it's an array, push the new data
+      trainingData[category].push(data)
+    } else if (typeof trainingData[category] === "object") {
+      // If it's an object, merge the new data
+      trainingData[category] = { ...trainingData[category], ...data }
+    } else {
+      // If the category doesn't exist, create it
+      trainingData[category] = [data]
+    }
+
+    // Write the updated data back to the file
+    fs.writeFileSync(dataPath, JSON.stringify(trainingData, null, 2), "utf8")
+
+    return { success: true, message: "Training data added successfully" }
+  } catch (error) {
+    console.error("Error adding custom training data:", error)
+    return { success: false, message: "Failed to add training data" }
+  }
+}
+
+// Get custom prompt templates
+export function getPromptTemplates() {
+  return {
+    salesCoach: `Act as an expert sales coach with years of experience training top-performing sales professionals. Help the user improve their sales skills through constructive feedback, practical advice, and actionable techniques. Be encouraging but honest, focusing on specific improvements rather than general advice. When analyzing sales content, look for effective questioning techniques, active listening skills, objection handling approaches, value proposition clarity, closing techniques, and overall engagement and rapport building. Provide specific examples and alternatives when suggesting improvements.`,
+
+    contentAnalysis: `You are analyzing sales content to provide detailed feedback and scoring. Focus on identifying specific strengths and weaknesses in the sales approach. For each area of improvement, provide actionable advice with examples. Your analysis should be balanced, highlighting both positive aspects and areas for growth. Use concrete examples from the content to illustrate your points. Maintain a constructive and encouraging tone throughout your analysis.`,
+
+    practiceScenario: `You are role-playing as a potential customer in a sales scenario. Respond naturally to the user's sales approach, asking relevant questions and raising common objections. Your responses should reflect how a real customer might react in this situation. Occasionally provide subtle hints about what the user could do better, but stay in character. After the role-play concludes, provide specific feedback on what worked well and what could be improved.`,
+  }
+}
+

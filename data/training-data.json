@@ -1,0 +1,207 @@
+{
+  "objectionHandling": [
+    {
+      "objection": "Your product is too expensive",
+      "responses": [
+        "I understand price is an important factor. Let's look at the total value our solution provides compared to alternatives.",
+        "You're right to be concerned about budget. Many of our customers initially felt the same way, but found the ROI justified the investment.",
+        "I appreciate your concern about the price. Can you help me understand what price point would work for your budget?"
+      ],
+      "tips": [
+        "Acknowledge the concern without being defensive",
+        "Focus on value rather than defending the price",
+        "Ask questions to understand their budget constraints",
+        "Provide ROI calculations when possible",
+        "Share customer success stories that demonstrate value"
+      ]
+    },
+    {
+      "objection": "We're already using a competitor",
+      "responses": [
+        "I understand you're working with [Competitor]. What aspects of their solution are working well for you?",
+        "Many of our current customers switched from [Competitor]. Would you be open to hearing what they found different about our approach?",
+        "That's helpful to know. Are there any challenges or limitations you're experiencing with your current solution?"
+      ],
+      "tips": [
+        "Never criticize the competitor directly",
+        "Focus on your unique differentiators",
+        "Ask about pain points with current solution",
+        "Highlight specific advantages without making direct comparisons",
+        "Offer a side-by-side comparison if the prospect is interested"
+      ]
+    },
+    {
+      "objection": "I need to think about it",
+      "responses": [
+        "I completely understand needing time to consider. To help you make the best decision, what specific information would be most helpful?",
+        "That makes sense. What aspects of our solution do you need more clarity on before moving forward?",
+        "I respect that. Would it be helpful if I summarized the key points we've discussed to help with your decision process?"
+      ],
+      "tips": [
+        "Respect their need for time while keeping momentum",
+        "Identify specific concerns that might be causing hesitation",
+        "Offer additional information that addresses their concerns",
+        "Suggest a specific time to follow up",
+        "Provide customer testimonials relevant to their situation"
+      ]
+    },
+    {
+      "objection": "We don't have budget right now",
+      "responses": [
+        "I understand budget constraints can be challenging. When do you typically review your budget for these types of solutions?",
+        "That's a common concern. Would it be helpful to discuss flexible payment options that might work within your current constraints?",
+        "I appreciate your transparency about the budget. Would a phased implementation approach be worth exploring to spread the investment?"
+      ],
+      "tips": [
+        "Determine if it's a timing issue or a value perception issue",
+        "Explore flexible payment terms or subscription options",
+        "Discuss ROI timeline to show when they'll recoup the investment",
+        "Offer a smaller initial package with room to expand",
+        "Ask about other budget cycles or end-of-quarter/year opportunities"
+      ]
+    }
+  ],
+  "closingTechniques": [
+    {
+      "technique": "Assumptive Close",
+      "description": "Proceed as if the prospect has already decided to buy",
+      "examples": [
+        "Let's go ahead and set up your account so you can start seeing results right away.",
+        "Should we schedule the implementation for next week or the week after?",
+        "I'll send over the agreement today so we can get you started by Friday."
+      ],
+      "tips": [
+        "Use positive language that assumes the sale",
+        "Focus on next steps rather than the decision itself",
+        "Only use when you've received strong buying signals",
+        "Be careful not to come across as presumptuous",
+        "Have a backup plan if they're not ready"
+      ]
+    },
+    {
+      "technique": "Summary Close",
+      "description": "Summarize all the benefits and value points before asking for the sale",
+      "examples": [
+        "To summarize, our solution will help you increase efficiency by 20%, reduce costs by 15%, and improve customer satisfaction scores. Does that align with what you're looking to achieve?",
+        "Based on our discussion, you need a solution that's easy to implement, integrates with your current systems, and provides detailed analytics. Our platform checks all those boxes. Are you ready to move forward?",
+        "Let me recap what we've covered: you mentioned challenges with [A, B, C] and our solution addresses those by [X, Y, Z]. Does that sound like what you're looking for?"
+      ],
+      "tips": [
+        "Personalize the summary to their specific needs and pain points",
+        "Highlight the most impactful benefits first",
+        "Keep it concise - focus on 3-5 key points",
+        "Use their language and terminology",
+        "End with a clear question that moves toward commitment"
+      ]
+    },
+    {
+      "technique": "Question Close",
+      "description": "Ask questions that lead the prospect to a buying decision",
+      "examples": [
+        "Based on what we've discussed, do you see how this solution could help your team achieve their goals?",
+        "What would prevent you from moving forward with this solution today?",
+        "On a scale of 1-10, how confident are you that our solution meets your needs?"
+      ],
+      "tips": [
+        "Use open-ended questions to understand remaining concerns",
+        "Listen carefully to their answers for buying signals or objections",
+        "Follow up with questions that address specific concerns",
+        "Avoid yes/no questions that can easily be declined",
+        "Use questions that help them visualize implementation and results"
+      ]
+    },
+    {
+      "technique": "Urgency Close",
+      "description": "Create a sense of urgency or scarcity to prompt a decision",
+      "examples": [
+        "We're offering this special pricing until the end of the month, after which it will increase by 15%.",
+        "We only have three implementation slots available in June, and they're filling up quickly.",
+        "The sooner we get started, the sooner you'll begin seeing the 20% efficiency improvement we discussed."
+      ],
+      "tips": [
+        "Only use legitimate reasons for urgency - never create false scarcity",
+        "Focus on the opportunity cost of delaying the decision",
+        "Highlight time-sensitive promotions or limited availability",
+        "Emphasize the value they'll gain by acting quickly",
+        "Be prepared to explain why the urgency exists"
+      ]
+    }
+  ],
+  "discoveryQuestions": [
+    {
+      "category": "Current Situation",
+      "questions": [
+        "Can you walk me through your current process for [relevant activity]?",
+        "What tools or solutions are you currently using to address [relevant challenge]?",
+        "How long have you been dealing with [pain point]?",
+        "Who else is involved in [relevant process] at your organization?",
+        "What metrics do you currently track related to [relevant area]?"
+      ]
+    },
+    {
+      "category": "Pain Points",
+      "questions": [
+        "What are the biggest challenges you're facing with [relevant area]?",
+        "How is [pain point] impacting your business objectives?",
+        "What happens if [pain point] isn't addressed in the next 6-12 months?",
+        "Have you tried to solve this problem before? What happened?",
+        "Which aspect of [pain point] is most frustrating for your team?"
+      ]
+    },
+    {
+      "category": "Goals and Objectives",
+      "questions": [
+        "What specific outcomes are you hoping to achieve?",
+        "How will you measure success for this initiative?",
+        "What's driving the timing of this project?",
+        "How does this initiative align with broader company objectives?",
+        "What would an ideal solution look like for you?"
+      ]
+    },
+    {
+      "category": "Decision Process",
+      "questions": [
+        "Besides yourself, who else will be involved in making this decision?",
+        "What criteria will you use to evaluate potential solutions?",
+        "What's your timeline for implementing a solution?",
+        "Have you allocated budget for this initiative?",
+        "What would the implementation process typically look like at your organization?"
+      ]
+    }
+  ],
+  "valuePropositions": [
+    {
+      "industry": "SaaS",
+      "examples": [
+        "Our platform reduces customer onboarding time by 40% while increasing user adoption by 25%, helping you accelerate time-to-value for your customers.",
+        "By automating repetitive customer support inquiries, our solution enables your team to focus on complex issues, reducing resolution time by 30% and improving customer satisfaction scores by 15%.",
+        "Our analytics dashboard provides real-time visibility into user behavior, helping you identify at-risk accounts before they churn and increasing retention rates by an average of 20%."
+      ]
+    },
+    {
+      "industry": "Financial Services",
+      "examples": [
+        "Our compliance solution automatically stays updated with changing regulations, reducing your risk of non-compliance penalties by 95% while cutting compliance management time in half.",
+        "By streamlining the loan approval process, our platform reduces decision time from days to minutes, increasing application completion rates by 35% and customer satisfaction by 40%.",
+        "Our wealth management platform provides personalized investment recommendations based on individual client goals, increasing assets under management by an average of 22% for our clients."
+      ]
+    },
+    {
+      "industry": "Healthcare",
+      "examples": [
+        "Our patient engagement platform reduces no-show rates by 35% while increasing patient satisfaction scores by 28%, helping you maximize provider utilization and improve care outcomes.",
+        "By automating insurance verification and pre-authorization, our solution reduces administrative costs by 25% and accelerates reimbursement cycles by an average of 15 days.",
+        "Our telehealth platform integrates seamlessly with your existing EHR system, enabling you to serve 40% more patients while reducing operational costs by 30%."
+      ]
+    },
+    {
+      "industry": "Manufacturing",
+      "examples": [
+        "Our predictive maintenance solution reduces unplanned downtime by 45% and extends equipment lifespan by 30%, maximizing production capacity and reducing capital expenditures.",
+        "By optimizing supply chain operations, our platform reduces inventory costs by 25% while improving on-time delivery rates by 35%, helping you meet customer demands more efficiently.",
+        "Our quality control system uses AI to detect defects with 99.8% accuracy, reducing returns by 40% and warranty claims by 35%, protecting your brand reputation and bottom line."
+      ]
+    }
+  ]
+}
+

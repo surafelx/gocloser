@@ -1,0 +1,78 @@
+{
+  "objectionHandling": [
+    {
+      "objection": "Your product doesn't have feature X that your competitor has",
+      "responses": [
+        "You're right that we approach that differently. While we don't have feature X exactly as our competitor does, our solution offers Y which actually addresses the underlying need more effectively. Let me show you how...",
+        "That's a great point about feature X. Many of our customers initially had the same concern, but found that our approach with feature Y actually solved their problem more efficiently. Would you like me to explain how?"
+      ],
+      "tips": [
+        "Acknowledge the feature difference without being defensive",
+        "Redirect to your solution's strengths that address the same need",
+        "Use specific examples of how your approach solves the problem",
+        "Ask questions to understand what they're trying to accomplish with that feature",
+        "Share customer success stories who had similar concerns"
+      ]
+    }
+  ],
+  "closingTechniques": [
+    {
+      "technique": "Next Steps Close",
+      "description": "Focus on the implementation process rather than asking for the sale directly",
+      "examples": [
+        "Based on what we've discussed, the next step would be to set up a technical review with your team. How does next Tuesday work for you?",
+        "To move forward, we'll need to schedule an onboarding call with your team. Would you prefer morning or afternoon sessions?",
+        "The implementation process typically takes two weeks. Would you like to target going live by the end of this month?"
+      ],
+      "tips": [
+        "Present the next steps as a natural progression, not a hard close",
+        "Be specific about what happens next in the process",
+        "Give options rather than yes/no questions",
+        "Focus on timing and logistics rather than the decision itself",
+        "Have your calendar ready to schedule the next meeting"
+      ]
+    }
+  ],
+  "industrySpecific": {
+    "software": [
+      "When selling software solutions, focus on ROI metrics like time saved, error reduction, and operational efficiency improvements.",
+      "For SaaS products, emphasize the total cost of ownership advantages compared to on-premise solutions.",
+      "Address security concerns proactively by highlighting your compliance certifications and data protection measures."
+    ],
+    "healthcare": [
+      "When selling to healthcare organizations, focus on patient outcomes and clinical workflow improvements.",
+      "Always address HIPAA compliance and data security early in the conversation.",
+      "Demonstrate understanding of reimbursement models and how your solution impacts them."
+    ],
+    "financial": [
+      "For financial services clients, emphasize risk reduction and compliance benefits.",
+      "Quantify the impact of your solution in terms of cost savings and revenue generation.",
+      "Address integration capabilities with existing financial systems and data security measures."
+    ]
+  },
+  "customScenarios": [
+    {
+      "name": "Enterprise Software Demo",
+      "description": "Practice demonstrating your enterprise software solution to a C-level executive who is concerned about ROI and implementation timeline.",
+      "keyPoints": [
+        "Focus on strategic business outcomes rather than features",
+        "Address implementation timeline concerns with a clear project plan",
+        "Prepare ROI calculations specific to their industry",
+        "Be ready to discuss integration with their existing systems",
+        "Have customer success stories from similar organizations"
+      ]
+    },
+    {
+      "name": "Handling Budget Freeze",
+      "description": "Practice responding to a prospect who says they're interested but their budget is frozen until next quarter.",
+      "keyPoints": [
+        "Explore creative financing options like deferred payment terms",
+        "Discuss phased implementation approaches that can start within current budget",
+        "Calculate cost of delay to create urgency",
+        "Offer a pilot program or proof of concept",
+        "Suggest ways to reallocate existing budget from less critical areas"
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,71 @@
+{
+  "projectName": "Sales AI",
+  "description": "An AI-powered sales coaching and analytics platform that helps sales professionals improve their skills and performance.",
+  "techStack": [
+    "Next.js",
+    "TypeScript",
+    "TailwindCSS",
+    "Tremor",
+    "pdfjs-dist",
+    "Google Generative AI",
+    "MongoDB",
+    "Jest",
+    "Playwright"
+  ],
+  "routes": [
+    "/",
+    "/chat",
+    "/analytics",
+    "/login",
+    "/signup",
+    "/billing",
+    "/settings"
+  ],
+  "criticalComponents": [
+    "Chat interface",
+    "Authentication flow",
+    "Performance analytics",
+    "PDF processing",
+    "Audio recording and playback",
+    "File upload and processing"
+  ],
+  "expectedDataSources": [
+    "Google Generative AI API",
+    "MongoDB for user data and chat history",
+    "User-uploaded files (PDF, audio, video)",
+    "User input via chat"
+  ],
+  "securityFocus": [
+    "Authentication and authorization",
+    "XSS prevention",
+    "CSRF protection",
+    "Secure file handling",
+    "API rate limiting"
+  ],
+  "a11yPriority": true,
+  "performancePriority": true,
+  "testingStrategy": {
+    "unitTests": "Jest + React Testing Library",
+    "e2eTests": "Playwright",
+    "coverageThreshold": 80,
+    "criticalPathsToTest": [
+      "User authentication",
+      "Chat functionality",
+      "File upload and processing",
+      "Analytics visualization"
+    ]
+  },
+  "knownIssues": [
+    "PDF processing may fail for some complex documents",
+    "Audio recording requires explicit user permission",
+    "Performance metrics may not be accurate for very large files",
+    "Mobile responsiveness needs improvement in some areas"
+  ],
+  "futureEnhancements": [
+    "Real-time collaboration",
+    "Advanced analytics with machine learning",
+    "Integration with CRM systems",
+    "Multi-language support",
+    "Custom AI training for specific sales methodologies"
+  ]
+}
