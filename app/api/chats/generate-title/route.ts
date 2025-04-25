@@ -37,20 +37,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a title using Gemini
-    const prompt = `Based on this conversation, generate a very short, concise title (maximum 5 words) that captures the main topic. Don't use quotes. Here's the conversation: ${userMessages}`;
-    
+    const prompt = `Based on this conversation, generate a very short, concise title (maximum 5 words) that captures the main topic. Don't use quotes or special characters. The title should be simple and descriptive. Here's the conversation: ${userMessages}`;
+
+    console.log('Generating title for chat...');
     const result = await generateGeminiResponse(prompt, [], 'chat');
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: 'Failed to generate title' },
-        { status: 500 }
-      );
+      console.error('Title generation failed:', result);
+      // Provide a fallback title based on the first message
+      const firstMessage = messages.find(msg => msg.role === 'user')?.content || '';
+      const fallbackTitle = firstMessage.split(' ').slice(0, 3).join(' ') + '...';
+      return NextResponse.json({ title: fallbackTitle });
     }
 
     // Clean up the title (remove quotes, limit length)
     let title = result.response.replace(/["']/g, '').trim();
-    
+
+    // Remove any special characters that might cause issues
+    title = title.replace(/[^\w\s]/g, '');
+
+    // If title is empty after cleaning, use a fallback
+    if (!title.trim()) {
+      const firstMessage = messages.find(msg => msg.role === 'user')?.content || '';
+      title = firstMessage.split(' ').slice(0, 3).join(' ') + '...';
+    }
+
     // Limit to 5 words
     const words = title.split(' ');
     if (words.length > 5) {

@@ -51,12 +51,12 @@ export function ChatMessage({
 
   return (
     <div className={cn(
-      'group flex items-start gap-x-3 py-4 w-full',
+      'group flex items-start gap-x-3 py-3 w-full',
       userRole === 'user' ? 'justify-end' : 'justify-start'
     )}>
       {userRole !== 'user' && <BotAvatar />}
       <div className={cn(
-        'rounded-md px-4 py-3 max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl text-sm',
+        'rounded-md px-4 py-2.5 max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl text-sm',
         userRole === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
       )}>
         {message.attachmentType && (

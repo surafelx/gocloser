@@ -316,12 +316,28 @@ export default function ChatPage() {
     setIsSearching(true)
     setSearchQuery(query)
 
-    // Simple search implementation - can be enhanced with semantic search
-    const results = messages.filter(message =>
-      message.content.toLowerCase().includes(query.toLowerCase())
-    )
+    console.log('Searching for:', query, 'in', messages.length, 'messages');
 
-    setSearchResults(results)
+    // Enhanced search implementation
+    const results = messages.filter(message => {
+      // Skip system messages or empty content
+      if (!message.content || message.role === 'system') {
+        return false;
+      }
+
+      // Check if the message content includes the query (case insensitive)
+      const contentMatch = message.content.toLowerCase().includes(query.toLowerCase());
+
+      // If there's an attachment, also check its name or type
+      const attachmentMatch = message.attachmentName
+        ? message.attachmentName.toLowerCase().includes(query.toLowerCase())
+        : false;
+
+      return contentMatch || attachmentMatch;
+    });
+
+    console.log('Search results:', results.length);
+    setSearchResults(results);
   }
 
   const clearSearch = () => {

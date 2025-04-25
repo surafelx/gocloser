@@ -213,6 +213,25 @@ function BillingPageContent() {
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
     const plan = searchParams.get("plan");
+    const sessionPreserved = searchParams.get("session_preserved");
+
+    // Check if we need to refresh auth state
+    if (sessionPreserved === "true") {
+      // Ensure we have the latest auth state
+      const checkAuthState = async () => {
+        try {
+          const response = await fetch('/api/auth/me');
+          if (!response.ok) {
+            console.warn('Session may have expired, redirecting to login...');
+            // Don't redirect immediately, let the user see the toast message first
+          }
+        } catch (error) {
+          console.error('Error checking auth state:', error);
+        }
+      };
+
+      checkAuthState();
+    }
 
     if (success === "true" && plan) {
       toast({

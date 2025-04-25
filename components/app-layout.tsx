@@ -34,7 +34,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { icon: MessageSquare, label: "Chat", href: "/chat", primary: true },
+    { icon: MessageSquare, label: "Chat", href: "/chat" },
     { icon: BarChart3, label: "Analytics", href: "/analytics" },
     { icon: CreditCard, label: "Billing", href: "/billing" },
     { icon: Settings, label: "Settings", href: "/settings" },
@@ -67,11 +67,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       key={index}
                       href={item.href}
                       className={`flex items-center gap-3 px-4 py-3 rounded-full transition-all duration-300 ${
-                        item.primary
+                        pathname === item.href || (item.href === "/chat" && pathname.startsWith("/chat/"))
                           ? "gradient-blue text-white shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 hover:scale-105"
-                          : pathname === item.href
-                            ? "bg-accent text-foreground hover:bg-accent/80 hover:scale-105"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent hover:scale-105"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent hover:scale-105"
                       }`}
                     >
                       <item.icon className="h-5 w-5" />
@@ -91,11 +89,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 key={index}
                 href={item.href}
                 className={`flex items-center gap-2 text-sm font-medium rounded-full px-5 py-2.5 transition-all duration-300 ${
-                  item.primary
+                  pathname === item.href || (item.href === "/chat" && pathname.startsWith("/chat/"))
                     ? "gradient-blue text-white shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 hover:scale-105"
-                    : pathname === item.href
-                      ? "bg-accent text-foreground hover:bg-accent/80 hover:scale-105"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent hover:scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent hover:scale-105"
                 }`}
               >
                 <item.icon className="h-4 w-4" />

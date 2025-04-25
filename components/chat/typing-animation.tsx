@@ -26,7 +26,7 @@ export function TypingAnimation({ className }: TypingAnimationProps) {
       <div className="h-2 w-2 rounded-full bg-primary/60 animate-pulse"></div>
       <div className="h-2 w-2 rounded-full bg-primary/60 animate-pulse delay-150"></div>
       <div className="h-2 w-2 rounded-full bg-primary/60 animate-pulse delay-300"></div>
-      <span className="text-xs text-muted-foreground">Typing{dots}</span>
+      <span className="text-xs text-muted-foreground w-16">Typing{dots}</span>
     </div>
   );
 }

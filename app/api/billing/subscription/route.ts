@@ -118,8 +118,13 @@ export async function POST(request: NextRequest) {
 
     // Get success and cancel URLs from the request or use defaults
     const origin = request.headers.get("origin") || "http://localhost:3000";
-    const successUrl = `${origin}/billing?success=true&plan=${planId}`;
-    const cancelUrl = `${origin}/billing?canceled=true`;
+
+    // Get the auth token from the request cookies
+    const authToken = request.cookies.get('auth_token')?.value || '';
+
+    // Include the auth token in the success and cancel URLs to maintain the session
+    const successUrl = `${origin}/billing?success=true&plan=${planId}&session_preserved=true`;
+    const cancelUrl = `${origin}/billing?canceled=true&session_preserved=true`;
 
     // Validate that the price ID exists
     if (!plan.priceId || plan.priceId.startsWith('price_1PbXXXXXXXXXXXXXXXXXXXXX')) {

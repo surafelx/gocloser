@@ -27,12 +27,16 @@ export async function GET(request: NextRequest) {
     // Get time range from query params
     const url = new URL(request.url);
     const timeRange = url.searchParams.get("timeRange") || "30days";
-    
+
     // Calculate date range based on timeRange
     const now = new Date();
     let startDate = new Date();
-    
+
     switch (timeRange) {
+      case "1day":
+        // Set to the beginning of the current day
+        startDate.setHours(0, 0, 0, 0);
+        break;
       case "7days":
         startDate.setDate(now.getDate() - 7);
         break;
@@ -55,12 +59,12 @@ export async function GET(request: NextRequest) {
 
     // Calculate analytics data
     const totalChats = chats.length;
-    
+
     // Count chats with attachments (audio, video, file)
-    const chatsWithAttachments = chats.filter(chat => 
+    const chatsWithAttachments = chats.filter(chat =>
       chat.messages.some((msg: any) => msg.attachmentType)
     ).length;
-    
+
     // Count total messages
     let totalMessages = 0;
     let userMessages = 0;
@@ -76,10 +80,10 @@ export async function GET(request: NextRequest) {
     chats.forEach(chat => {
       chat.messages.forEach((msg: any) => {
         totalMessages++;
-        
+
         if (msg.role === 'user') {
           userMessages++;
-          
+
           // Count message types
           if (msg.attachmentType === 'audio') {
             messagesByType.audio++;
@@ -119,7 +123,7 @@ export async function GET(request: NextRequest) {
       chat.messages.forEach((msg: any) => {
         if (msg.role === 'user') {
           const content = msg.content.toLowerCase();
-          
+
           // Check for topic keywords
           Object.entries(topicKeywords).forEach(([topic, keywords]) => {
             if (keywords.some(keyword => content.includes(keyword))) {
@@ -136,8 +140,8 @@ export async function GET(request: NextRequest) {
       .slice(0, 5)
       .map(([topic, count]) => ({
         topic,
-        percentage: totalUserMessages > 0 
-          ? Math.round((count / totalUserMessages) * 100) 
+        percentage: totalUserMessages > 0
+          ? Math.round((count / totalUserMessages) * 100)
           : 0
       }));
 

@@ -80,6 +80,14 @@ export default function AnalyticsPage() {
         <div className="flex justify-end mb-6">
           <div className="inline-flex rounded-full shadow-sm bg-accent p-1">
             <Button
+              variant={timeRange === "1day" ? "gradient" : "ghost"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setTimeRange("1day")}
+            >
+              Daily
+            </Button>
+            <Button
               variant={timeRange === "7days" ? "gradient" : "ghost"}
               size="sm"
               className="rounded-full"

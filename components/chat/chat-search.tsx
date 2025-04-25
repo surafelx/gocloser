@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,18 @@ export function ChatSearch({ onSearch, onClear, className }: ChatSearchProps) {
       onSearch(query.trim());
     }
   };
+
+  // Add real-time search as user types
+  useEffect(() => {
+    // Debounce the search to avoid too many updates
+    const timer = setTimeout(() => {
+      if (query.trim()) {
+        onSearch(query.trim());
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, onSearch]);
 
   const handleClear = () => {
     setQuery('');

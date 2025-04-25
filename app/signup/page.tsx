@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/use-auth"
 export default function SignupPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { googleAuth } = useAuth()
+  const { googleAuth, login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -74,13 +74,21 @@ export default function SignupPage() {
         throw new Error(data.error || 'Signup failed')
       }
 
-      // Success - redirect to chat page
+      // Success - now login with the created credentials to ensure proper auth state
       toast({
         title: "Account created successfully",
         description: "Welcome to GoCloser!",
       })
 
-      router.push('/chat')
+      // Login with the created credentials
+      try {
+        await login(email, password);
+        // The login function will handle the redirect
+      } catch (loginError) {
+        console.error('Auto-login after signup failed:', loginError);
+        // If auto-login fails, still redirect to chat
+        router.push('/chat');
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred during signup')
       console.error('Signup error:', err)

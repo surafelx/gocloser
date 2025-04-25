@@ -49,17 +49,48 @@ export async function saveFile(file: Buffer, originalName: string, fileType: str
 // Generate a summary of a file using Gemini AI
 export async function generateFileSummary(filePath: string, fileType: string) {
   try {
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      console.error(`File not found at path: ${filePath}`);
+      return 'Unable to generate summary: File not found.';
+    }
+
     // Read the file content
     const fileContent = fs.readFileSync(filePath, 'utf-8');
 
-    // Generate a summary using Gemini
-    const prompt = `Please provide a concise summary of the following ${fileType} content:\n\n${fileContent}`;
-    const summary = await generateResponse(prompt);
+    if (!fileContent || fileContent.trim() === '') {
+      console.error('File is empty or contains no text content');
+      return 'Unable to generate summary: File is empty or contains no text content.';
+    }
 
-    return summary;
+    // Limit content length to prevent token overflow
+    const maxContentLength = 10000; // Adjust based on token limits
+    const truncatedContent = fileContent.length > maxContentLength
+      ? fileContent.substring(0, maxContentLength) + '... [content truncated due to length]'
+      : fileContent;
+
+    // Generate a summary using Gemini
+    console.log(`Generating summary for ${fileType} file: ${filePath}`);
+    const prompt = `Please provide a concise summary of the following ${fileType} content:\n\n${truncatedContent}`;
+
+    const response = await generateResponse(prompt);
+
+    // Check if response is valid
+    if (!response || !response.text) {
+      console.error('Invalid response from Gemini API');
+      return 'Unable to generate summary: Invalid response from AI service.';
+    }
+
+    return response.text;
   } catch (error) {
     console.error('Error generating file summary:', error);
-    return 'Unable to generate summary for this file.';
+
+    // Provide more detailed error message
+    if (error instanceof Error) {
+      return `Unable to generate summary: ${error.message}`;
+    }
+
+    return 'Unable to generate summary for this file. Please try again with a different file.';
   }
 }
 
@@ -93,7 +124,7 @@ export async function getFileById(fileId: string, userId: string) {
 // Delete a file
 export async function deleteFile(fileId: string, userId: string) {
   const file = await File.findOne({ _id: fileId, userId });
-  
+
   if (!file) {
     throw new Error('File not found');
   }
