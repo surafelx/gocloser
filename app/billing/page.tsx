@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,8 @@ interface Plan {
   current?: boolean;
 }
 
-export default function BillingPage() {
+// Create a client component that uses searchParams
+function BillingPageContent() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const [isAddingPaymentMethod, setIsAddingPaymentMethod] = useState(false);
@@ -78,9 +79,9 @@ export default function BillingPage() {
     tokensUsed: 0,
     tokensRemaining: 100000,
     percentageUsed: 0,
-    planId: 'free',
-    planName: 'Free',
-    hasActiveSubscription: false
+    planId: "free",
+    planName: "Free",
+    hasActiveSubscription: false,
   });
 
   // Get subscription and payment methods
@@ -114,7 +115,7 @@ export default function BillingPage() {
     const fetchTokenStats = async () => {
       try {
         // Get the user's token usage stats
-        const response = await fetch('/api/token-usage/stats');
+        const response = await fetch("/api/token-usage/stats");
         if (response.ok) {
           const data = await response.json();
           setTokenStats({
@@ -122,13 +123,13 @@ export default function BillingPage() {
             tokensUsed: data.tokensUsed || 0,
             tokensRemaining: data.tokensRemaining || 100000,
             percentageUsed: data.percentageUsed || 0,
-            planId: data.planId || 'free',
-            planName: data.planName || 'Free',
-            hasActiveSubscription: data.hasActiveSubscription || false
+            planId: data.planId || "free",
+            planName: data.planName || "Free",
+            hasActiveSubscription: data.hasActiveSubscription || false,
           });
         }
       } catch (error) {
-        console.error('Error fetching token stats:', error);
+        console.error("Error fetching token stats:", error);
       }
     };
 
@@ -291,20 +292,24 @@ export default function BillingPage() {
                       <Progress
                         value={tokenStats.percentageUsed}
                         className="h-2"
-                        style={{
-                          '--progress-value': `${tokenStats.percentageUsed}%`,
-                          '--progress-color': tokenStats.percentageUsed < 50 ? 'var(--green-500)' :
-                                             tokenStats.percentageUsed < 80 ? 'var(--amber-500)' :
-                                             'var(--red-500)'
-                        } as React.CSSProperties}
+                        style={
+                          {
+                            "--progress-value": `${tokenStats.percentageUsed}%`,
+                            "--progress-color":
+                              tokenStats.percentageUsed < 50
+                                ? "var(--green-500)"
+                                : tokenStats.percentageUsed < 80
+                                ? "var(--amber-500)"
+                                : "var(--red-500)",
+                          } as React.CSSProperties
+                        }
                       />
                       <div className="flex justify-between text-xs text-muted-foreground mt-2">
                         <span>
-                          {tokenStats.tokensRemaining.toLocaleString()} tokens remaining
+                          {tokenStats.tokensRemaining.toLocaleString()} tokens
+                          remaining
                         </span>
-                        <span>
-                          {tokenStats.percentageUsed}% used
-                        </span>
+                        <span>{tokenStats.percentageUsed}% used</span>
                       </div>
                     </div>
                   </CardContent>
@@ -473,12 +478,17 @@ export default function BillingPage() {
                       <Progress
                         value={tokenStats.percentageUsed}
                         className="h-3"
-                        style={{
-                          '--progress-value': `${tokenStats.percentageUsed}%`,
-                          '--progress-color': tokenStats.percentageUsed < 50 ? 'var(--green-500)' :
-                                             tokenStats.percentageUsed < 80 ? 'var(--amber-500)' :
-                                             'var(--red-500)'
-                        } as React.CSSProperties}
+                        style={
+                          {
+                            "--progress-value": `${tokenStats.percentageUsed}%`,
+                            "--progress-color":
+                              tokenStats.percentageUsed < 50
+                                ? "var(--green-500)"
+                                : tokenStats.percentageUsed < 80
+                                ? "var(--amber-500)"
+                                : "var(--red-500)",
+                          } as React.CSSProperties
+                        }
                       />
                       <div className="flex justify-between text-xs text-muted-foreground mt-2">
                         <span>0</span>
@@ -486,7 +496,7 @@ export default function BillingPage() {
                       </div>
                     </div>
 
-                      {/* {dailyUsage.length > 0 && (
+                    {/* {dailyUsage.length > 0 && (
                         <div className="mt-8">
                           <h3 className="text-lg font-medium mb-4">Daily Token Usage</h3>
                           <div className="h-[300px]">
@@ -504,18 +514,18 @@ export default function BillingPage() {
                         </div>
                       )} */}
 
-                      {tokenStats.hasActiveSubscription && (
-                        <div className="flex justify-end mt-4">
-                          <Button
-                            onClick={() => setIsAddingTokens(true)}
-                            disabled={isChangingPlan}
-                          >
-                            <Zap className="mr-2 h-4 w-4" />
-                            Add More Tokens
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                    {tokenStats.hasActiveSubscription && (
+                      <div className="flex justify-end mt-4">
+                        <Button
+                          onClick={() => setIsAddingTokens(true)}
+                          disabled={isChangingPlan}
+                        >
+                          <Zap className="mr-2 h-4 w-4" />
+                          Add More Tokens
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                   )
                 </CardContent>
               </Card>
@@ -691,11 +701,13 @@ export default function BillingPage() {
           </DialogHeader>
 
           {clientSecret && (
-            <AddPaymentMethod
-              clientSecret={clientSecret}
-              onSuccess={handlePaymentMethodAdded}
-              onCancel={() => setIsAddingPaymentMethod(false)}
-            />
+            <Suspense>
+              <AddPaymentMethod
+                clientSecret={clientSecret}
+                onSuccess={handlePaymentMethodAdded}
+                onCancel={() => setIsAddingPaymentMethod(false)}
+              />
+            </Suspense>
           )}
         </DialogContent>
       </Dialog>
@@ -748,5 +760,28 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
     </AppLayout>
+  );
+}
+
+// Export the main page component with Suspense
+export default function BillingPage() {
+  return (
+    <Suspense fallback={
+      <AppLayout>
+        <div className="container py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
+            <p className="text-muted-foreground">
+              Manage your subscription and billing information
+            </p>
+          </div>
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        </div>
+      </AppLayout>
+    }>
+      <BillingPageContent />
+    </Suspense>
   );
 }

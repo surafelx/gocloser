@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { connectToDatabase } from '@/lib/mongoose';
+import connectToDatabase from '@/lib/mongoose';
 import stripe, { getPlanByPriceId } from '@/lib/stripe';
 import User from '@/models/User';
 import Subscription from '@/models/Subscription';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongoose';
+import connectToDatabase from '@/lib/mongoose';
 import TokenUsage from '@/models/TokenUsage';
 import { getCurrentUser } from '@/lib/auth';
 import { updateTokenUsage } from '@/lib/token-manager';
