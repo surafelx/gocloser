@@ -12,7 +12,10 @@ export function middleware(request: NextRequest) {
       !request.nextUrl.pathname.startsWith("/_next") &&
       !request.nextUrl.pathname.includes(".") &&
       // Allow API requests in development mode
-      !(process.env.NODE_ENV !== 'production' && request.nextUrl.pathname.startsWith('/api/'))) {
+      !(process.env.NODE_ENV !== 'production' &&
+        (request.nextUrl.pathname.startsWith('/api/') ||
+         request.nextUrl.pathname.startsWith('/chat')))) {
+    console.log('Redirecting unauthenticated request to login:', request.nextUrl.pathname);
     return NextResponse.redirect(new URL("/login", request.url))
   }
 

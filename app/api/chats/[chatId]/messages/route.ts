@@ -36,23 +36,29 @@ export async function POST(
 
     // Parse the request body
     const message = await request.json();
+    console.log('Adding message to chat:', chatId, 'Message:', message);
 
     // Find the chat by ID and user ID
+    console.log('Looking for chat with ID:', chatId, 'and userId:', currentUser.userId);
     const chat = await Chat.findOne({
       _id: chatId,
       userId: currentUser.userId,
     });
 
     if (!chat) {
+      console.error('Chat not found for ID:', chatId, 'and userId:', currentUser.userId);
       return NextResponse.json(
         { error: 'Chat not found' },
         { status: 404 }
       );
     }
 
+    console.log('Found chat:', chat.id, 'with', chat.messages.length, 'messages');
+
     // Add the message to the chat
     chat.messages.push(message);
     await chat.save();
+    console.log('Message added successfully, chat now has', chat.messages.length, 'messages');
 
     return NextResponse.json({
       success: true,

@@ -35,17 +35,21 @@ export async function GET(
     }
 
     // Find the chat by ID and user ID
+    console.log('Looking for chat with ID:', chatId, 'and userId:', currentUser.userId);
     const chat = await Chat.findOne({
       _id: chatId,
       userId: currentUser.userId,
     });
 
     if (!chat) {
+      console.error('Chat not found for ID:', chatId, 'and userId:', currentUser.userId);
       return NextResponse.json(
         { error: 'Chat not found' },
         { status: 404 }
       );
     }
+
+    console.log('Found chat:', chat._id, 'with', chat.messages.length, 'messages');
 
     // Transform MongoDB document to expected format
     const formattedChat = {

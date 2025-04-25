@@ -579,10 +579,13 @@ export function ChatSidebar() {
                         alt={user?.name || "User"}
                       />
                       <AvatarFallback>
-                        {user?.name?.charAt(0) || "U"}
+                        {user?.name ? user.name.split(' ')[0][0].toUpperCase() + (user.name.split(' ')[1]?.[0]?.toUpperCase() || '') : 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="truncate">{user?.name || "User"}</span>
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{user?.name || "Guest"}</span>
+                      <span className="text-xs text-muted-foreground">{user?.email}</span>
+                    </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">

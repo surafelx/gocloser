@@ -95,6 +95,8 @@ export default function ChatPage() {
     currentChatId
   } = useChat()
 
+  console.log('Chat context loaded with messages:', storedMessages?.length || 0)
+
   // Log the loaded chat for debugging
   useEffect(() => {
     if (chat) {
@@ -110,11 +112,15 @@ export default function ChatPage() {
     initialMessages,
   })
 
-  const [messages, setMessages] = useState<Message[]>(storedMessages)
+  const [messages, setMessages] = useState<Message[]>(storedMessages.length > 0 ? storedMessages : initialMessages)
 
   // Keep messages in sync with stored messages
   useEffect(() => {
-    setMessages(storedMessages)
+    console.log('Stored messages updated:', storedMessages)
+    // Only update if we have stored messages, otherwise keep the initial welcome message
+    if (storedMessages.length > 0) {
+      setMessages(storedMessages)
+    }
   }, [storedMessages])
 
   const [input, setInput] = useState("")
@@ -342,7 +348,12 @@ export default function ChatPage() {
     }
 
     // Add user message to local state immediately for better UX
-    setMessages(prev => [...prev, userMessage]);
+    console.log('Adding user message to local state:', userMessage);
+
+    // Force update the messages state with the new user message
+    const updatedMessages = [...messages, userMessage];
+    console.log('Setting messages state directly:', updatedMessages);
+    setMessages(updatedMessages);
 
     if (selectedFile) {
       // Validate file
@@ -488,7 +499,13 @@ export default function ChatPage() {
     } else {
       // User message is already added to the UI at the beginning of the function
       // Save the user message to storage
-      await saveMessage(userMessage)
+      console.log('Saving user message to storage:', userMessage)
+      try {
+        await saveMessage(userMessage)
+        console.log('User message saved successfully')
+      } catch (error) {
+        console.error('Error saving user message:', error)
+      }
       setInput("")
       setIsLoading(true)
 
@@ -712,6 +729,7 @@ export default function ChatPage() {
   }
 
   const renderMessage = (message: Message) => {
+    console.log('Rendering message:', message.id, message.role, message.content.substring(0, 30) + '...')
     return (
       <ChatMessage
         key={message.id}
@@ -905,7 +923,13 @@ I recommend practicing these techniques in our chat interface. Would you like to
               </>
             ) : (
               <>
-                {messages.map(renderMessage)}
+                {messages.length > 0 ? (
+                  messages.map(renderMessage)
+                ) : (
+                  <div className="p-4 text-center">
+                    <p className="text-muted-foreground">No messages to display. Start a conversation!</p>
+                  </div>
+                )}
                 {error && (
                   <ErrorMessage
                     message={error.message}

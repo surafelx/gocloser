@@ -65,14 +65,15 @@ export function getCurrentUser(request: NextRequest): JwtPayload | null {
   const token = getAuthToken(request);
 
   // For development: if no token is present, return a mock user
-  // if (!token && process.env.NODE_ENV !== "production") {
-  //   return {
-  //     id: MOCK_USER_ID, // Mock ObjectId
-  //     userId: MOCK_USER_ID, // Mock ObjectId (for backward compatibility)
-  //     email: "test@example.com",
-  //     name: "Test User",
-  //   };
-  // }
+  if (!token && process.env.NODE_ENV !== "production") {
+    console.log('Using mock user for development');
+    return {
+      id: MOCK_USER_ID, // Mock ObjectId
+      userId: MOCK_USER_ID, // Mock ObjectId (for backward compatibility)
+      email: "test@example.com",
+      name: "Test User",
+    };
+  }
 
   if (!token) return null;
   return verifyToken(token);

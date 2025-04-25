@@ -3,9 +3,24 @@ import connectToDatabase from '@/lib/mongoose';
 import TokenUsage from '@/models/TokenUsage';
 import { getCurrentUser } from '@/lib/auth';
 import { updateTokenUsage } from '@/lib/token-manager';
+import { corsMiddleware } from '@/lib/cors';
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
 
 // GET endpoint to retrieve token usage
 export async function GET(request: NextRequest) {
+  return corsMiddleware(request, async (req) => {
   try {
     // Check if user is authenticated
     const currentUser = getCurrentUser(request);
@@ -104,19 +119,21 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+  });
 }
 
 // POST endpoint to add token usage
 export async function POST(request: NextRequest) {
-  try {
-    // Check if user is authenticated
-    const currentUser = getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
-    }
+  return corsMiddleware(request, async (req) => {
+    try {
+      // Check if user is authenticated
+      const currentUser = getCurrentUser(req);
+      if (!currentUser) {
+        return NextResponse.json(
+          { error: 'Not authenticated' },
+          { status: 401 }
+        );
+      }
 
     // Get request body
     const {
@@ -189,4 +206,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  });
 }

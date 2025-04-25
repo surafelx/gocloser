@@ -112,11 +112,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 >
                   <Avatar className="h-10 w-10 border-2 border-primary/50 transition-all hover:border-primary">
                     <AvatarImage
-                      src="/placeholder.svg?height=40&width=40"
-                      alt="User"
+                      src={user?.profilePicture}
+                      alt={user?.name || "User"}
                     />
                     <AvatarFallback className="bg-primary/10 text-primary">
-                      {user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}
+                      {user?.name ? user.name.split(' ')[0][0].toUpperCase() + (user.name.split(' ')[1]?.[0]?.toUpperCase() || '') : 'U'}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -128,17 +128,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
               >
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
+                    <p className="text-sm font-medium leading-none">{user?.name || 'Guest'}</p>
                     <p className="text-xs leading-none text-muted-foreground">
                       {user?.email || 'No email'}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-
+                <DropdownMenuItem asChild>
+                  <Link href="/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="rounded-lg cursor-pointer transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  onClick={logout}
+                  className="text-red-600 focus:text-red-600 focus:bg-red-100"
+                  onClick={() => {
+                    logout();
+                    router.push('/login');
+                  }}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>

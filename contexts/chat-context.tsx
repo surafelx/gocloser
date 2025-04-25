@@ -81,6 +81,11 @@ export function ChatProvider({ children, initialMessages = [] }: { children: Rea
     }
   }, [chat]);
 
+  // Log when messages change
+  useEffect(() => {
+    console.log('Messages in context updated:', messages);
+  }, [messages]);
+
   return (
     <ChatContext.Provider
       value={{

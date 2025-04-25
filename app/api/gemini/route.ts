@@ -1,14 +1,30 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateResponse, analyzeContent } from "@/lib/gemini"
 import { loadTrainingData, getPromptTemplates } from "@/lib/training-data-loader"
+import { corsMiddleware } from "@/lib/cors"
 
 // This module should only be used on the server side
 
 import { generateGeminiResponse, analyzeContentWithGemini } from '@/app/actions/gemini-actions';
 
+export async function OPTIONS(request: NextRequest) {
+  // Handle OPTIONS request for CORS preflight
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
-  try {
-    const { prompt, history, type, content, additionalContext } = await request.json()
+  // Add CORS headers to the response
+  return await corsMiddleware(request, async (req) => {
+    try {
+      const { prompt, history, type, content, additionalContext } = await req.json()
 
     // Handle different request types
     if (type === "chat" || type === "practice") {
@@ -62,5 +78,6 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
+  });
 }
 

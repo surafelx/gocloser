@@ -59,9 +59,11 @@ export async function POST(request: NextRequest) {
 
     // Parse the request body
     const { title, messages } = await request.json();
+    console.log('Creating new chat with title:', title, 'and messages:', messages);
 
     // Validate userId is a valid ObjectId
     if (!mongoose.Types.ObjectId.isValid(currentUser.userId)) {
+      console.error('Invalid user ID format:', currentUser.userId);
       return NextResponse.json(
         { error: "Invalid user ID format" },
         { status: 400 }
@@ -74,6 +76,8 @@ export async function POST(request: NextRequest) {
       title: title || "New Chat",
       messages: messages || [],
     });
+
+    console.log('Chat created successfully:', chat._id, 'with', chat.messages.length, 'messages');
 
     return NextResponse.json(
       {

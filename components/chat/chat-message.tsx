@@ -44,6 +44,8 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
+  console.log('Rendering ChatMessage:', message.id, message.role, message.content.substring(0, 30));
+
   return (
     <div className={cn(
       'group flex items-start gap-x-3 py-4 w-full',

@@ -195,11 +195,14 @@ export function useChatStorage({ chatId, initialMessages = [] }: UseChatStorageP
 
   // Save message to chat
   const saveMessage = useCallback(async (message: Message) => {
+    console.log('saveMessage called with:', message);
     setIsLoading(true);
     setError(null);
     try {
       // Add message to local state first for immediate UI update
+      console.log('Current messages in storage:', messages);
       const updatedMessages = [...messages, message];
+      console.log('Updated messages in storage:', updatedMessages);
       setMessages(updatedMessages);
 
       if (chat) {
