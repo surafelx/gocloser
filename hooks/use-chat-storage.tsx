@@ -199,9 +199,17 @@ export function useChatStorage({ chatId, initialMessages = [] }: UseChatStorageP
     setIsLoading(true);
     setError(null);
     try {
+      // Ensure the message has the correct role
+      const messageToSave = {
+        ...message,
+        role: message.role || (message.id.includes('user') ? 'user' : 'assistant')
+      };
+
+      console.log('Saving message with role:', messageToSave.role);
+
       // Add message to local state first for immediate UI update
       console.log('Current messages in storage:', messages);
-      const updatedMessages = [...messages, message];
+      const updatedMessages = [...messages, messageToSave];
       console.log('Updated messages in storage:', updatedMessages);
       setMessages(updatedMessages);
 
@@ -212,7 +220,7 @@ export function useChatStorage({ chatId, initialMessages = [] }: UseChatStorageP
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(message),
+          body: JSON.stringify(messageToSave),
         });
 
         const data = await response.json();

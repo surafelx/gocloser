@@ -116,10 +116,22 @@ export default function ChatPage() {
 
   // Keep messages in sync with stored messages
   useEffect(() => {
-    console.log('Stored messages updated:', storedMessages)
+    console.log('Stored messages updated:', storedMessages.length, 'Current messages:', messages.length)
+
+    // Find any user messages that might be in the current state but not in stored messages
+    // This can happen when a user sends a message but it hasn't been saved to the server yet
+    const pendingUserMessages = messages.filter(msg =>
+      msg.role === 'user' && !storedMessages.some(sm => sm.id === msg.id)
+    );
+
+    console.log('Pending user messages:', pendingUserMessages.length);
+
     // Only update if we have stored messages, otherwise keep the initial welcome message
     if (storedMessages.length > 0) {
-      setMessages(storedMessages)
+      // Combine stored messages with any pending user messages
+      const combinedMessages = [...storedMessages, ...pendingUserMessages];
+      console.log('Setting combined messages:', combinedMessages.length);
+      setMessages(combinedMessages);
     }
   }, [storedMessages])
 
@@ -155,7 +167,7 @@ export default function ChatPage() {
             if (blob.type.includes('mp3') || blob.type.includes('mpeg')) {
               fileExtension = 'mp3';
               mimeType = 'audio/mpeg';
-            } else if (blob.type.includes('ogg')) {
+            } else if (blob.type.includes('oggFix ')) {
               fileExtension = 'ogg';
               mimeType = 'audio/ogg';
             } else if (blob.type.includes('wav')) {
@@ -343,7 +355,7 @@ export default function ChatPage() {
 
     let userMessage: Message = {
       id: Date.now().toString(),
-      role: "user",
+      role: "user", // Ensure this is set to "user"
       content: messageContent,
     }
 
@@ -351,9 +363,15 @@ export default function ChatPage() {
     console.log('Adding user message to local state:', userMessage);
 
     // Force update the messages state with the new user message
+    // Create a new array to ensure React detects the change
     const updatedMessages = [...messages, userMessage];
     console.log('Setting messages state directly:', updatedMessages);
+
+    // Set the messages state with the updated messages
     setMessages(updatedMessages);
+
+    // Log the current messages after update
+    console.log('Messages after update:', updatedMessages.length);
 
     if (selectedFile) {
       // Validate file
@@ -509,12 +527,13 @@ export default function ChatPage() {
       setInput("")
       setIsLoading(true)
 
-      // Add a temporary loading message
+      // Add a temporary loading message with a clear loading ID
       const loadingMessage: Message = {
-        id: 'loading-' + Date.now(),
+        id: 'loading-' + Date.now().toString(),
         role: 'assistant',
         content: 'Thinking...',
       }
+      console.log('Adding loading message:', loadingMessage.id);
       setMessages(prev => [...prev, loadingMessage])
 
       try {
@@ -730,10 +749,17 @@ export default function ChatPage() {
 
   const renderMessage = (message: Message) => {
     console.log('Rendering message:', message.id, message.role, message.content.substring(0, 30) + '...')
+
+    // Ensure the message role is properly set
+    const messageToRender = {
+      ...message,
+      role: message.role || (message.id.includes('user') ? 'user' : 'assistant')
+    };
+
     return (
       <ChatMessage
-        key={message.id}
-        message={message}
+        key={messageToRender.id}
+        message={messageToRender}
         isLoading={isLoading}
         onShowPerformance={(msg: Message) => setCurrentAnalysis(msg)}
       />
@@ -914,7 +940,20 @@ I recommend practicing these techniques in our chat interface. Would you like to
                   </p>
                 </div>
                 {searchResults.length > 0 ? (
-                  searchResults.map(renderMessage)
+                  // Sort search results the same way as regular messages
+                  [...searchResults]
+                    .sort((a, b) => {
+                      // If messages have the same timestamp (from the ID), maintain original order
+                      if (a.id === b.id) return 0;
+
+                      // Extract timestamp from ID (assuming ID is timestamp-based)
+                      const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
+                      const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
+
+                      // Sort by timestamp
+                      return aTime - bTime;
+                    })
+                    .map(renderMessage)
                 ) : (
                   <div className="p-4 text-center">
                     <p className="text-muted-foreground">No messages found matching your search.</p>
@@ -924,7 +963,20 @@ I recommend practicing these techniques in our chat interface. Would you like to
             ) : (
               <>
                 {messages.length > 0 ? (
-                  messages.map(renderMessage)
+                  // Sort messages to ensure correct order (user messages first, then AI responses)
+                  [...messages]
+                    .sort((a, b) => {
+                      // If messages have the same timestamp (from the ID), maintain original order
+                      if (a.id === b.id) return 0;
+
+                      // Extract timestamp from ID (assuming ID is timestamp-based)
+                      const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
+                      const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
+
+                      // Sort by timestamp
+                      return aTime - bTime;
+                    })
+                    .map(renderMessage)
                 ) : (
                   <div className="p-4 text-center">
                     <p className="text-muted-foreground">No messages to display. Start a conversation!</p>

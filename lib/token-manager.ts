@@ -206,6 +206,7 @@ export async function updateTokenUsage(
  */
 export async function getTokenUsageStats(userId: string) {
   try {
+    console.log(`Getting token usage stats for user ID: ${userId}`);
     await dbConnect();
 
     // Get user's subscription
@@ -214,21 +215,86 @@ export async function getTokenUsageStats(userId: string) {
       status: "active",
     });
 
+    console.log(`Subscription found for user ${userId}:`, subscription ? 'Yes' : 'No');
+
     // Get user to check subscription status
     const user = await User.findById(userId);
+
+    // If user doesn't exist, create a default user record with free plan
+    if (!user) {
+      console.log(`User ${userId} not found in database - creating default user record`);
+      try {
+        // Create a new user with default settings
+        const newUser = new User({
+          _id: userId,
+          hasActiveSubscription: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        await newUser.save();
+        console.log(`Created default user record for ${userId}`);
+
+        // Create a free subscription for this user
+        const now = new Date();
+        const nextMonth = new Date(now);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+        const newSubscription = new Subscription({
+          userId,
+          stripeCustomerId: 'free_plan_' + userId,
+          stripeSubscriptionId: 'free_plan_' + userId,
+          stripePriceId: 'free',
+          planId: "free",
+          planName: "Free",
+          status: "active",
+          currentPeriodStart: now,
+          currentPeriodEnd: nextMonth,
+          cancelAtPeriodEnd: false,
+          tokenLimit: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+          tokensUsed: 0,
+        });
+
+        await newSubscription.save();
+        console.log(`Created free subscription for new user ${userId}`);
+
+        // Return default stats for new user
+        return {
+          planId: "free",
+          planName: "Free",
+          tokenLimit: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+          tokensUsed: 0,
+          tokensRemaining: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+          percentageUsed: 0,
+          hasActiveSubscription: false,
+        };
+      } catch (createError) {
+        console.error(`Error creating default user record: ${createError}`);
+        // Continue with default values even if creation fails
+      }
+    }
+
     const hasActiveSubscription = user?.hasActiveSubscription || false;
+    console.log(`User ${userId} has active subscription:`, hasActiveSubscription);
 
     // If they have an active subscription
     if (subscription && hasActiveSubscription) {
+      console.log(`Active subscription details for user ${userId}:`, {
+        planId: subscription.planId,
+        planName: subscription.planName,
+        tokenLimit: subscription.tokenLimit,
+        tokensUsed: subscription.tokensUsed,
+      });
+
       return {
         planId: subscription.planId,
         planName: subscription.planName,
         tokenLimit: subscription.tokenLimit,
         tokensUsed: subscription.tokensUsed,
-        tokensRemaining: subscription.tokenLimit - subscription.tokensUsed,
-        percentageUsed: Math.round(
+        tokensRemaining: Math.max(0, subscription.tokenLimit - subscription.tokensUsed),
+        percentageUsed: Math.min(100, Math.round(
           (subscription.tokensUsed / subscription.tokenLimit) * 100
-        ),
+        )),
         hasActiveSubscription: true,
       };
     }
@@ -238,34 +304,95 @@ export async function getTokenUsageStats(userId: string) {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const totalTokensUsed = await TokenUsage.aggregate([
-      {
-        $match: {
+    console.log(`Getting token usage for free plan user ${userId} since:`, startOfMonth);
+
+    try {
+      const totalTokensUsed = await TokenUsage.aggregate([
+        {
+          $match: {
+            userId,
+            createdAt: { $gte: startOfMonth },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalTokens: { $sum: "$totalTokens" },
+          },
+        },
+      ]);
+
+      const usedTokens =
+        totalTokensUsed.length > 0 ? totalTokensUsed[0].totalTokens : 0;
+      const freeTokenLimit = SUBSCRIPTION_PLANS.FREE.tokenLimit;
+
+      console.log(`Free plan token usage for user ${userId}:`, {
+        usedTokens,
+        freeTokenLimit,
+        remaining: Math.max(0, freeTokenLimit - usedTokens),
+        percentageUsed: Math.round((usedTokens / freeTokenLimit) * 100),
+      });
+
+      // Check if this is a new user with no token usage history
+      if (totalTokensUsed.length === 0) {
+        console.log(`No token usage history found for user ${userId} - creating free subscription`);
+
+        // Try to find a free subscription for this user
+        const existingFreeSubscription = await Subscription.findOne({
           userId,
-          createdAt: { $gte: startOfMonth },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalTokens: { $sum: "$totalTokens" },
-        },
-      },
-    ]);
+          planId: "free",
+        });
 
-    const usedTokens =
-      totalTokensUsed.length > 0 ? totalTokensUsed[0].totalTokens : 0;
-    const freeTokenLimit = SUBSCRIPTION_PLANS.FREE.tokenLimit;
+        // If no free subscription exists, create one
+        if (!existingFreeSubscription) {
+          const now = new Date();
+          const nextMonth = new Date(now);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
 
-    return {
-      planId: "free",
-      planName: "Free",
-      tokenLimit: freeTokenLimit,
-      tokensUsed: usedTokens,
-      tokensRemaining: Math.max(0, freeTokenLimit - usedTokens),
-      percentageUsed: Math.round((usedTokens / freeTokenLimit) * 100),
-      hasActiveSubscription: false,
-    };
+          const newSubscription = new Subscription({
+            userId,
+            stripeCustomerId: 'free_plan_' + userId,
+            stripeSubscriptionId: 'free_plan_' + userId,
+            stripePriceId: 'free',
+            planId: "free",
+            planName: "Free",
+            status: "active",
+            currentPeriodStart: now,
+            currentPeriodEnd: nextMonth,
+            cancelAtPeriodEnd: false,
+            tokenLimit: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+            tokensUsed: 0,
+          });
+
+          await newSubscription.save();
+          console.log(`Created free subscription for user ${userId} with no token usage history`);
+        }
+      }
+
+      return {
+        planId: "free",
+        planName: "Free",
+        tokenLimit: freeTokenLimit,
+        tokensUsed: usedTokens,
+        tokensRemaining: Math.max(0, freeTokenLimit - usedTokens),
+        percentageUsed: Math.min(100, Math.round((usedTokens / freeTokenLimit) * 100)),
+        hasActiveSubscription: false,
+      };
+    } catch (error) {
+      console.error(`Error getting token usage for free plan user ${userId}:`, error);
+
+      // Fallback to default values if there's an error
+      const freeTokenLimit = SUBSCRIPTION_PLANS.FREE.tokenLimit;
+      return {
+        planId: "free",
+        planName: "Free",
+        tokenLimit: freeTokenLimit,
+        tokensUsed: 0,
+        tokensRemaining: freeTokenLimit,
+        percentageUsed: 0,
+        hasActiveSubscription: false,
+      };
+    }
   } catch (error) {
     console.error("Error getting token usage stats:", error);
     throw error;

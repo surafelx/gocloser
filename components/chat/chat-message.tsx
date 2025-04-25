@@ -44,17 +44,20 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
-  console.log('Rendering ChatMessage:', message.id, message.role, message.content.substring(0, 30));
+  console.log('Rendering ChatMessage:', message.id, message.role, message.content.substring(0, 30), 'isUser:', isUser);
+
+  // Force the component to recognize user messages
+  const userRole = isUser ? 'user' : 'assistant';
 
   return (
     <div className={cn(
       'group flex items-start gap-x-3 py-4 w-full',
-      isUser ? 'justify-end' : 'justify-start'
+      userRole === 'user' ? 'justify-end' : 'justify-start'
     )}>
-      {!isUser && <BotAvatar />}
+      {userRole !== 'user' && <BotAvatar />}
       <div className={cn(
         'rounded-md px-4 py-3 max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl text-sm',
-        isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+        userRole === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
       )}>
         {message.attachmentType && (
           <div className="mb-2 text-xs border-l-2 border-primary/30 pl-2 py-1 bg-primary/5 rounded">
@@ -62,7 +65,7 @@ export function ChatMessage({
           </div>
         )}
 
-        {isLoading && !isUser ? (
+        {message.id.startsWith('loading-') && userRole !== 'user' ? (
           <TypingAnimation />
         ) : message.isAnalysis ? (
           <PerformanceAnalysis performanceData={message.performanceData} fileName={message.attachmentName} fileType={message.attachmentType} />
@@ -70,14 +73,14 @@ export function ChatMessage({
           <MarkdownMessage content={message.content} />
         )}
 
-        {!isUser && message.tokenUsage && (
+        {userRole !== 'user' && message.tokenUsage && (
           <MessageActions
             message={message}
             onShowPerformance={onShowPerformance}
           />
         )}
       </div>
-      {isUser && <UserAvatar />}
+      {userRole === 'user' && <UserAvatar />}
     </div>
   );
 }

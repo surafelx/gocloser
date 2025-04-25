@@ -46,6 +46,7 @@ interface Chat {
   title: string;
   updatedAt: string;
   preview: string;
+  messages?: any[]; // Optional messages property for title generation
 }
 
 export function ChatSidebar() {
@@ -63,6 +64,37 @@ export function ChatSidebar() {
   const [editTitle, setEditTitle] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+  const [generatingTitleForChats, setGeneratingTitleForChats] = useState<string[]>([]);
+
+  // Auto-generate title for a chat if needed
+  const autoGenerateTitleIfNeeded = useCallback(async (chatId: string, chatMessages: any[]) => {
+    try {
+      // Add this chat to the generating titles list
+      setGeneratingTitleForChats(prev => [...prev, chatId]);
+
+      // Check if the chat has a default title and at least 2 user messages
+      const userMessages = chatMessages.filter((msg: any) => msg.role === "user");
+      if (userMessages.length >= 2) {
+        // Generate a title using the Gemini API
+        const newTitle = await generateTitle(chatMessages);
+
+        if (newTitle && newTitle !== 'New Chat') {
+          // Update the chat with the new title
+          await updateChat(newTitle);
+
+          // Return the new title
+          return newTitle;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error("Error auto-generating title:", error);
+      return null;
+    } finally {
+      // Remove this chat from the generating titles list
+      setGeneratingTitleForChats(prev => prev.filter(id => id !== chatId));
+    }
+  }, [generateTitle, updateChat]);
 
   // Fetch chat history
   const fetchChats = useCallback(async () => {
@@ -89,7 +121,6 @@ export function ChatSidebar() {
         })
         .map((chat: any) => {
           // Find the first user message to use for preview
-
           const userMessage = chat.messages.find(
             (msg: any) => msg.role === "user"
           );
@@ -107,10 +138,41 @@ export function ChatSidebar() {
               ? lastMessage.content.substring(0, 50) +
                 (lastMessage.content.length > 50 ? "..." : "")
               : "No inputs",
+            messages: chat.messages, // Keep messages for title generation
           };
         });
 
-      setChats(formattedChats);
+      // Auto-generate titles for chats with default titles
+      const chatsNeedingTitles = formattedChats.filter(chat =>
+        chat.title === "New Chat" &&
+        chat.messages &&
+        chat.messages.filter((msg: any) => msg.role === "user").length >= 2
+      );
+
+      if (chatsNeedingTitles.length > 0) {
+        console.log(`Auto-generating titles for ${chatsNeedingTitles.length} chats`);
+
+        // Add all chats to the generating titles list
+        setGeneratingTitleForChats(prev => [
+          ...prev,
+          ...chatsNeedingTitles.map(chat => chat.id)
+        ]);
+
+        // Process one chat at a time to avoid rate limiting
+        for (const chat of chatsNeedingTitles) {
+          if (chat.messages) {
+            const newTitle = await autoGenerateTitleIfNeeded(chat.id, chat.messages);
+            if (newTitle) {
+              // Update the title in our local state
+              chat.title = newTitle;
+            }
+          }
+        }
+      }
+
+      // Remove the messages property before setting state
+      const cleanedChats = formattedChats.map(({ messages, ...rest }) => rest);
+      setChats(cleanedChats);
     } catch (error) {
       console.error("Error fetching chats:", error);
       toast({
@@ -123,7 +185,7 @@ export function ChatSidebar() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, autoGenerateTitleIfNeeded]);
 
   // Fetch chats on component mount
   useEffect(() => {
@@ -160,6 +222,10 @@ export function ChatSidebar() {
         setCurrentChatId(chatId);
 
         router.push(`/chat/${chatId}`);
+
+        // Note: We don't need to auto-generate a title here because
+        // the chat will start with just the welcome message.
+        // The title will be auto-generated after the user sends their second message.
       } else {
         // If no chatId was returned, just go to the main chat page
         router.push("/chat");
@@ -305,7 +371,8 @@ export function ChatSidebar() {
   // Generate a title for a chat using AI
   const handleGenerateTitle = async (chatId: string) => {
     try {
-      setIsLoading(true);
+      // Add this chat to the generating titles list
+      setGeneratingTitleForChats(prev => [...prev, chatId]);
 
       // First, get the chat messages
       const response = await fetch(`/api/chats/${chatId}`);
@@ -347,6 +414,8 @@ export function ChatSidebar() {
         variant: "destructive",
       });
     } finally {
+      // Remove this chat from the generating titles list
+      setGeneratingTitleForChats(prev => prev.filter(id => id !== chatId));
       setIsLoading(false);
     }
   };
@@ -488,7 +557,14 @@ export function ChatSidebar() {
                             <div className="flex items-center gap-2">
                               <MessageSquare className="h-4 w-4 text-primary flex-shrink-0" />
                               <p className="font-medium truncate">
-                                {chat.title}
+                                {generatingTitleForChats.includes(chat.id) ? (
+                                  <span className="flex items-center gap-1">
+                                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                    Generating title...
+                                  </span>
+                                ) : (
+                                  chat.title
+                                )}
                               </p>
                             </div>
                             <p className="text-xs text-muted-foreground truncate">

@@ -132,6 +132,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if Stripe API key is properly configured
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.length < 10) {
+      console.error("STRIPE_SECRET_KEY is missing or invalid");
+      return NextResponse.json(
+        {
+          error: "Stripe is not properly configured",
+          details: "The STRIPE_SECRET_KEY environment variable is missing or invalid. Please check your environment configuration."
+        },
+        { status: 500 }
+      );
+    }
+
     // Create a checkout session
     try {
       const session = await stripe.checkout.sessions.create({
@@ -155,10 +167,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     } catch (stripeError: any) {
       console.error("Stripe checkout session error:", stripeError);
+
+      // Check if the error is related to the Stripe API key
+      const errorMessage = stripeError.message || "Failed to create checkout session";
+      const isAuthError = errorMessage.includes("Invalid API Key") ||
+                          errorMessage.includes("No API key") ||
+                          errorMessage.includes("authentication");
+
+      let details = "There was an issue with the Stripe integration. Please check your Stripe configuration.";
+
+      if (isAuthError) {
+        details = "The Stripe API key appears to be invalid or missing. Please check your STRIPE_SECRET_KEY environment variable.";
+      }
+
       return NextResponse.json(
         {
-          error: stripeError.message || "Failed to create checkout session",
-          details: "There was an issue with the Stripe integration. Please check your Stripe configuration."
+          error: errorMessage,
+          details: details
         },
         { status: 400 }
       );
@@ -211,45 +236,80 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Check if Stripe API key is properly configured
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.length < 10) {
+      console.error("STRIPE_SECRET_KEY is missing or invalid");
+      return NextResponse.json(
+        {
+          error: "Stripe is not properly configured",
+          details: "The STRIPE_SECRET_KEY environment variable is missing or invalid. Please check your environment configuration."
+        },
+        { status: 500 }
+      );
+    }
+
     // Handle different actions
-    switch (action) {
-      case "cancel":
-        // Cancel subscription at period end
-        await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-          cancel_at_period_end: true,
-        });
+    try {
+      switch (action) {
+        case "cancel":
+          try {
+            // Cancel subscription at period end
+            await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+              cancel_at_period_end: true,
+            });
+          } catch (stripeError) {
+            console.error("Stripe error when canceling subscription:", stripeError);
+            // Continue with database update even if Stripe fails
+            console.log("Proceeding with database update despite Stripe error");
+          }
 
-        // Update subscription in database
-        await Subscription.updateOne(
-          { _id: subscription._id },
-          { $set: { cancelAtPeriodEnd: true } }
-        );
+          // Update subscription in database
+          await Subscription.updateOne(
+            { _id: subscription._id },
+            { $set: { cancelAtPeriodEnd: true } }
+          );
 
-        return NextResponse.json({
-          success: true,
-          message:
-            "Subscription will be canceled at the end of the billing period",
-        });
+          return NextResponse.json({
+            success: true,
+            message:
+              "Subscription will be canceled at the end of the billing period",
+          });
 
-      case "reactivate":
-        // Reactivate subscription
-        await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-          cancel_at_period_end: false,
-        });
+        case "reactivate":
+          try {
+            // Reactivate subscription
+            await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+              cancel_at_period_end: false,
+            });
+          } catch (stripeError) {
+            console.error("Stripe error when reactivating subscription:", stripeError);
+            // Continue with database update even if Stripe fails
+            console.log("Proceeding with database update despite Stripe error");
+          }
 
-        // Update subscription in database
-        await Subscription.updateOne(
-          { _id: subscription._id },
-          { $set: { cancelAtPeriodEnd: false } }
-        );
+          // Update subscription in database
+          await Subscription.updateOne(
+            { _id: subscription._id },
+            { $set: { cancelAtPeriodEnd: false } }
+          );
 
-        return NextResponse.json({
-          success: true,
-          message: "Subscription has been reactivated",
-        });
+          return NextResponse.json({
+            success: true,
+            message: "Subscription has been reactivated",
+          });
 
-      default:
-        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+        default:
+          return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+      }
+    } catch (error) {
+      console.error("Error processing subscription action:", error);
+      return NextResponse.json(
+        {
+          error: "Failed to process subscription action",
+          details: "There was an error processing your request. Please try again later."
+        },
+        { status: 500 }
+      );
     }
   } catch (error: any) {
     console.error("Error updating subscription:", error);

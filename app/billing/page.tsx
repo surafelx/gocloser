@@ -45,6 +45,49 @@ import {
 } from "@/hooks/use-payment-methods";
 import { SUBSCRIPTION_PLANS } from "@/lib/stripe";
 
+// Create a simple error boundary component since React's ErrorBoundary is class-based
+const ErrorBoundary = ({ children, FallbackComponent, onError }: {
+  children: React.ReactNode;
+  FallbackComponent: React.ComponentType<any>;
+  onError?: (error: Error) => void;
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    // Add error event listener
+    const errorHandler = (event: ErrorEvent) => {
+      console.error('Error caught by ErrorBoundary:', event.error);
+      setError(event.error);
+      setHasError(true);
+      if (onError) onError(event.error);
+    };
+
+    // Add unhandled rejection handler
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      console.error('Promise rejection caught by ErrorBoundary:', event.reason);
+      const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
+      setError(error);
+      setHasError(true);
+      if (onError) onError(error);
+    };
+
+    window.addEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
+  }, [onError]);
+
+  if (hasError) {
+    return <FallbackComponent error={error} />;
+  }
+
+  return <>{children}</>;
+};
+
 // Define plan types
 interface Plan {
   id: string;
@@ -64,6 +107,7 @@ function BillingPageContent() {
   const [isAddingPaymentMethod, setIsAddingPaymentMethod] = useState(false);
   const [isAddingTokens, setIsAddingTokens] = useState(false);
   const [additionalTokens, setAdditionalTokens] = useState(100000);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Token stats state
   const [tokenStats, setTokenStats] = useState<{
@@ -114,10 +158,18 @@ function BillingPageContent() {
   useEffect(() => {
     const fetchTokenStats = async () => {
       try {
+        console.log("Fetching token usage stats...");
         // Get the user's token usage stats
         const response = await fetch("/api/token-usage/stats");
-        if (response.ok) {
-          const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch token stats: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log("Token stats data:", data);
+
+        if (data.success) {
           setTokenStats({
             tokenLimit: data.tokenLimit || 100000,
             tokensUsed: data.tokensUsed || 0,
@@ -127,9 +179,23 @@ function BillingPageContent() {
             planName: data.planName || "Free",
             hasActiveSubscription: data.hasActiveSubscription || false,
           });
+
+          console.log("Token stats updated successfully");
+        } else {
+          console.error("Token stats API returned success: false", data);
+          toast({
+            title: "Failed to load token usage",
+            description: data.error || "Please try again later",
+            variant: "destructive",
+          });
         }
       } catch (error) {
         console.error("Error fetching token stats:", error);
+        toast({
+          title: "Failed to load token usage",
+          description: "Please try again later",
+          variant: "destructive",
+        });
       }
     };
 
@@ -140,7 +206,7 @@ function BillingPageContent() {
 
     // Clean up interval on unmount
     return () => clearInterval(intervalId);
-  }, []);
+  }, [toast]);
 
   // Check for success or canceled params
   useEffect(() => {
@@ -211,6 +277,7 @@ function BillingPageContent() {
         <Tabs defaultValue="subscription">
           <TabsList className="mb-6">
             <TabsTrigger value="subscription">Subscription</TabsTrigger>
+            <TabsTrigger value="tokens">Token Usage</TabsTrigger>
             <TabsTrigger value="history">Billing History</TabsTrigger>
             <TabsTrigger value="payment">Payment Methods</TabsTrigger>
           </TabsList>
@@ -311,6 +378,15 @@ function BillingPageContent() {
                         </span>
                         <span>{tokenStats.percentageUsed}% used</span>
                       </div>
+
+                      {tokenStats.percentageUsed > 80 && (
+                        <div className="flex items-center gap-1.5 mt-3 text-red-500">
+                          <AlertCircle size={14} className="text-red-500" />
+                          <span className="text-xs">
+                            Approaching token limit
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-between">
@@ -440,93 +516,99 @@ function BillingPageContent() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="bg-accent/20 rounded-lg p-4">
-                        <p className="text-sm font-medium text-muted-foreground mb-2">
-                          Current Plan
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {tokenStats.planName}
-                        </p>
-                      </div>
-
-                      <div className="bg-accent/20 rounded-lg p-4">
-                        <p className="text-sm font-medium text-muted-foreground mb-2">
-                          Total Tokens
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {tokenStats.tokenLimit.toLocaleString()}
-                        </p>
-                      </div>
-
-                      <div className="bg-accent/20 rounded-lg p-4">
-                        <p className="text-sm font-medium text-muted-foreground mb-2">
-                          Tokens Remaining
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {tokenStats.tokensRemaining.toLocaleString()}
-                        </p>
+                  {isLoadingSubscription ? (
+                    <div className="py-10">
+                      <div className="flex justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                       </div>
                     </div>
-
-                    <div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span>Usage</span>
-                        <span>{tokenStats.percentageUsed}%</span>
-                      </div>
-                      <Progress
-                        value={tokenStats.percentageUsed}
-                        className="h-3"
-                        style={
-                          {
-                            "--progress-value": `${tokenStats.percentageUsed}%`,
-                            "--progress-color":
-                              tokenStats.percentageUsed < 50
-                                ? "var(--green-500)"
-                                : tokenStats.percentageUsed < 80
-                                ? "var(--amber-500)"
-                                : "var(--red-500)",
-                          } as React.CSSProperties
-                        }
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>0</span>
-                        <span>{tokenStats.tokenLimit.toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    {/* {dailyUsage.length > 0 && (
-                        <div className="mt-8">
-                          <h3 className="text-lg font-medium mb-4">Daily Token Usage</h3>
-                          <div className="h-[300px]">
-                            <AreaChart
-                              data={dailyUsage}
-                              categories={['promptTokens', 'completionTokens']}
-                              index="date"
-                              colors={['primary', 'indigo']}
-                              valueFormatter={(value: number) => `${value.toLocaleString()} tokens`}
-                              showLegend={true}
-                              showGridLines={true}
-                              showAnimation={true}
-                            />
-                          </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-accent/20 rounded-lg p-4">
+                          <p className="text-sm font-medium text-muted-foreground mb-2">
+                            Current Plan
+                          </p>
+                          <p className="text-2xl font-bold">
+                            {tokenStats.planName}
+                          </p>
                         </div>
-                      )} */}
 
-                    {tokenStats.hasActiveSubscription && (
-                      <div className="flex justify-end mt-4">
-                        <Button
-                          onClick={() => setIsAddingTokens(true)}
-                          disabled={isChangingPlan}
-                        >
-                          <Zap className="mr-2 h-4 w-4" />
-                          Add More Tokens
-                        </Button>
+                        <div className="bg-accent/20 rounded-lg p-4">
+                          <p className="text-sm font-medium text-muted-foreground mb-2">
+                            Total Tokens
+                          </p>
+                          <p className="text-2xl font-bold">
+                            {tokenStats.tokenLimit.toLocaleString()}
+                          </p>
+                        </div>
+
+                        <div className="bg-accent/20 rounded-lg p-4">
+                          <p className="text-sm font-medium text-muted-foreground mb-2">
+                            Tokens Remaining
+                          </p>
+                          <p className="text-2xl font-bold">
+                            {tokenStats.tokensRemaining.toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  )
+
+                      <div>
+                        <div className="flex justify-between text-sm mb-2">
+                          <span>Usage</span>
+                          <span>{tokenStats.percentageUsed}%</span>
+                        </div>
+                        <Progress
+                          value={tokenStats.percentageUsed}
+                          className="h-3"
+                          style={
+                            {
+                              "--progress-value": `${tokenStats.percentageUsed}%`,
+                              "--progress-color":
+                                tokenStats.percentageUsed < 50
+                                  ? "var(--green-500)"
+                                  : tokenStats.percentageUsed < 80
+                                  ? "var(--amber-500)"
+                                  : "var(--red-500)",
+                            } as React.CSSProperties
+                          }
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                          <span>0</span>
+                          <span>{tokenStats.tokenLimit.toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      {tokenStats.percentageUsed > 80 && (
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mt-4">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                            <p className="font-medium text-red-600 dark:text-red-400">
+                              Approaching Token Limit
+                            </p>
+                          </div>
+                          <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                            You have used {tokenStats.percentageUsed}% of your token limit.
+                            Consider upgrading your plan or adding more tokens.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Daily usage chart would go here */}
+
+                      {tokenStats.hasActiveSubscription && (
+                        <div className="flex justify-end mt-4">
+                          <Button
+                            onClick={() => setIsAddingTokens(true)}
+                            disabled={isChangingPlan}
+                          >
+                            <Zap className="mr-2 h-4 w-4" />
+                            Add More Tokens
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -763,25 +845,80 @@ function BillingPageContent() {
   );
 }
 
-// Export the main page component with Suspense
-export default function BillingPage() {
+// Error boundary component
+function ErrorFallback() {
   return (
-    <Suspense fallback={
-      <AppLayout>
-        <div className="container py-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
-            <p className="text-muted-foreground">
-              Manage your subscription and billing information
-            </p>
-          </div>
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    <AppLayout>
+      <div className="container py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
+          <p className="text-muted-foreground">
+            Manage your subscription and billing information
+          </p>
+        </div>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 mt-4">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500" />
+            <div>
+              <h3 className="text-lg font-medium text-red-800 dark:text-red-300">
+                Unable to load billing information
+              </h3>
+              <p className="text-red-600 dark:text-red-400 mt-1">
+                We're having trouble loading your billing information. Please try refreshing the page or contact support if the issue persists.
+              </p>
+            </div>
+            <Button
+              onClick={() => window.location.reload()}
+              variant="outline"
+              className="mt-2"
+            >
+              Refresh Page
+            </Button>
           </div>
         </div>
-      </AppLayout>
-    }>
-      <BillingPageContent />
+      </div>
+    </AppLayout>
+  );
+}
+
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <AppLayout>
+      <div className="container py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
+          <p className="text-muted-foreground">
+            Manage your subscription and billing information
+          </p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground">Loading billing information...</p>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
+
+// Export the main page component with Suspense and error handling
+export default function BillingPage() {
+  const [hasError, setHasError] = useState(false);
+
+  // Reset error state when component mounts (for when user navigates back to page)
+  useEffect(() => {
+    setHasError(false);
+  }, []);
+
+  if (hasError) {
+    return <ErrorFallback />;
+  }
+
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ErrorBoundary FallbackComponent={ErrorFallback} onError={() => setHasError(true)}>
+        <BillingPageContent />
+      </ErrorBoundary>
     </Suspense>
   );
 }

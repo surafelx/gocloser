@@ -1,16 +1,71 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import AppLayout from "@/components/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FileText, Mic, Video, BarChart3, MessageSquare, ArrowUpDown } from "lucide-react"
+import { FileText, Mic, Video, BarChart3, MessageSquare, ArrowUpDown, Loader2 } from "lucide-react"
 import { ChatAnalysis } from "@/components/analytics/chat-analysis"
+import { useToast } from "@/components/ui/use-toast"
+
+interface AnalyticsData {
+  totalChats: number;
+  chatsWithAttachments: number;
+  totalMessages: number;
+  userMessages: number;
+  aiMessages: number;
+  messageTypePercentages: {
+    text: number;
+    audio: number;
+    video: number;
+    file: number;
+  };
+  topics: {
+    topic: string;
+    percentage: number;
+  }[];
+}
 
 export default function AnalyticsPage() {
+  const { toast } = useToast()
   const [timeRange, setTimeRange] = useState("30days")
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Fetch analytics data when timeRange changes
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch(`/api/analytics?timeRange=${timeRange}`)
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch analytics data')
+        }
+
+        const data = await response.json()
+
+        if (data.success && data.analytics) {
+          setAnalyticsData(data.analytics)
+        } else {
+          throw new Error('Invalid response from server')
+        }
+      } catch (error) {
+        console.error('Error fetching analytics data:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to load analytics data. Please try again.',
+          variant: 'destructive',
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAnalyticsData()
+  }, [timeRange, toast])
 
   return (
     <AppLayout>
@@ -87,67 +142,78 @@ export default function AnalyticsPage() {
                 <CardDescription>Track your improvement over time</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="bg-accent/20">
-                      <CardContent className="pt-6">
-                        <div className="text-center">
-                          <div className="text-4xl font-bold text-primary mb-2">24</div>
-                          <p className="text-sm text-muted-foreground">Total Chats</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-accent/20">
-                      <CardContent className="pt-6">
-                        <div className="text-center">
-                          <div className="text-4xl font-bold text-primary mb-2">8</div>
-                          <p className="text-sm text-muted-foreground">Analyzed Chats</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-accent/20">
-                      <CardContent className="pt-6">
-                        <div className="text-center">
-                          <div className="text-4xl font-bold text-primary mb-2">+12%</div>
-                          <p className="text-sm text-muted-foreground">Improvement</p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   </div>
+                ) : analyticsData ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <Card className="bg-accent/20">
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <div className="text-4xl font-bold text-primary mb-2">{analyticsData.totalChats}</div>
+                            <p className="text-sm text-muted-foreground">Total Chats</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-accent/20">
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <div className="text-4xl font-bold text-primary mb-2">{analyticsData.chatsWithAttachments}</div>
+                            <p className="text-sm text-muted-foreground">Chats with Attachments</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-accent/20">
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <div className="text-4xl font-bold text-primary mb-2">{analyticsData.totalMessages}</div>
+                            <p className="text-sm text-muted-foreground">Total Messages</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
 
-                  <div className="p-6 border rounded-lg bg-card">
-                    <h3 className="text-lg font-medium mb-4">Key Improvement Areas</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-sm font-medium">Clarity</span>
-                          <span className="text-sm text-green-500">+15%</span>
+                    <div className="p-6 border rounded-lg bg-card">
+                      <h3 className="text-lg font-medium mb-4">Message Distribution</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-sm font-medium">User Messages</span>
+                            <span className="text-sm text-blue-500">
+                              {analyticsData.userMessages} ({Math.round((analyticsData.userMessages / analyticsData.totalMessages) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="h-2 bg-accent rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500"
+                              style={{ width: `${Math.round((analyticsData.userMessages / analyticsData.totalMessages) * 100)}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="h-2 bg-accent rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500" style={{ width: '75%' }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-sm font-medium">Engagement</span>
-                          <span className="text-sm text-amber-500">+8%</span>
-                        </div>
-                        <div className="h-2 bg-accent rounded-full overflow-hidden">
-                          <div className="h-full bg-amber-500" style={{ width: '68%' }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-sm font-medium">Objection Handling</span>
-                          <span className="text-sm text-blue-500">+10%</span>
-                        </div>
-                        <div className="h-2 bg-accent rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500" style={{ width: '62%' }}></div>
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-sm font-medium">AI Responses</span>
+                            <span className="text-sm text-green-500">
+                              {analyticsData.aiMessages} ({Math.round((analyticsData.aiMessages / analyticsData.totalMessages) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="h-2 bg-accent rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-green-500"
+                              style={{ width: `${Math.round((analyticsData.aiMessages / analyticsData.totalMessages) * 100)}%` }}
+                            ></div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No analytics data available. Try changing the time range or start more chats.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -159,63 +225,64 @@ export default function AnalyticsPage() {
                 <CardDescription>How you've been using the AI coach</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="flex items-center p-4 border rounded-lg">
-                      <div className="bg-primary/10 p-3 rounded-full mr-4">
-                        <MessageSquare className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Text Chats</p>
-                        <p className="text-2xl font-bold">65%</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center p-4 border rounded-lg">
-                      <div className="bg-primary/10 p-3 rounded-full mr-4">
-                        <Mic className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Voice Recordings</p>
-                        <p className="text-2xl font-bold">25%</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center p-4 border rounded-lg">
-                      <div className="bg-primary/10 p-3 rounded-full mr-4">
-                        <FileText className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">File Uploads</p>
-                        <p className="text-2xl font-bold">10%</p>
-                      </div>
-                    </div>
+                {isLoading ? (
+                  <div className="flex justify-center items-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   </div>
+                ) : analyticsData ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="flex items-center p-4 border rounded-lg">
+                        <div className="bg-primary/10 p-3 rounded-full mr-4">
+                          <MessageSquare className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Text Chats</p>
+                          <p className="text-2xl font-bold">{analyticsData.messageTypePercentages.text}%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center p-4 border rounded-lg">
+                        <div className="bg-primary/10 p-3 rounded-full mr-4">
+                          <Mic className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Voice Recordings</p>
+                          <p className="text-2xl font-bold">{analyticsData.messageTypePercentages.audio}%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center p-4 border rounded-lg">
+                        <div className="bg-primary/10 p-3 rounded-full mr-4">
+                          <FileText className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">File Uploads</p>
+                          <p className="text-2xl font-bold">{analyticsData.messageTypePercentages.file}%</p>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="p-6 border rounded-lg bg-card">
-                    <h3 className="text-lg font-medium mb-4">Most Common Topics</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Sales Techniques</span>
-                        <Badge className="bg-primary/10 text-primary">32%</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Objection Handling</span>
-                        <Badge className="bg-primary/10 text-primary">24%</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Product Knowledge</span>
-                        <Badge className="bg-primary/10 text-primary">18%</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Closing Techniques</span>
-                        <Badge className="bg-primary/10 text-primary">15%</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Other</span>
-                        <Badge className="bg-primary/10 text-primary">11%</Badge>
+                    <div className="p-6 border rounded-lg bg-card">
+                      <h3 className="text-lg font-medium mb-4">Most Common Topics</h3>
+                      <div className="space-y-3">
+                        {analyticsData.topics.map((topic, index) => (
+                          <div key={index} className="flex items-center justify-between">
+                            <span className="text-sm">{topic.topic}</span>
+                            <Badge className="bg-primary/10 text-primary">{topic.percentage}%</Badge>
+                          </div>
+                        ))}
+                        {analyticsData.topics.length === 0 && (
+                          <div className="text-center py-4 text-muted-foreground">
+                            <p>No topic data available yet.</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No analytics data available. Try changing the time range or start more chats.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
