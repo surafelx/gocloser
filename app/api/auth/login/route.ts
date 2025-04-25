@@ -2,14 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
 import { generateToken, setAuthCookie } from '@/lib/auth';
+import { corsMiddleware } from '@/lib/cors';
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    // Connect to the database
-    await dbConnect();
+  return corsMiddleware(request, async (req) => {
+    try {
+      // Connect to the database
+      await dbConnect();
 
     // Parse the request body
-    const { email, password } = await request.json();
+    const { email, password } = await req.json();
 
     // Validate input
     if (!email || !password) {
@@ -65,4 +80,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  });
 }

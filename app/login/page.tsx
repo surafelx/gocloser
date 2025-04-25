@@ -8,17 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Chrome as Google } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { handleGoogleLogin as initiateGoogleLogin, processGoogleAuthResponse } from "@/lib/google-auth";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { googleAuth } = useAuth();
+  const { googleAuth, login: authLogin, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+  const isLoading = localLoading || authLoading;
   const [error, setError] = useState("");
 
   // Google client ID from environment variable
@@ -32,7 +33,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError("");
-    setIsLoading(true);
+    setLocalLoading(true);
 
     try {
       if (!GOOGLE_CLIENT_ID) {
@@ -64,46 +65,48 @@ export default function LoginPage() {
           } catch (error: any) {
             console.error('Error processing Google login:', error);
             setError(error.message || 'Failed to process Google login');
-            setIsLoading(false);
+            setLocalLoading(false);
           }
         },
         (error) => {
           console.error('Google authentication error:', error);
           setError(error.message || 'Google authentication failed');
-          setIsLoading(false);
+          setLocalLoading(false);
         }
       );
 
       setTimeout(() => {
-        setIsLoading(false);
+        setLocalLoading(false);
       }, 5000);
 
     } catch (err: any) {
       console.error('Google login initialization error:', err);
       setError(err.message || 'An error occurred during Google login');
-      setIsLoading(false);
+      setLocalLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setLocalLoading(true);
     setError("");
 
     try {
-      // Simple login logic
-      if (email && password) {
-        // Simulate successful login
-        setTimeout(() => {
-          router.push("/chat");
-        }, 1000);
-      } else {
+      if (!email || !password) {
         setError("Please enter both email and password");
+        setLocalLoading(false);
+        return;
       }
-    } catch (err) {
-      setError("Login failed. Please try again.");
+
+      // Use the auth hook's login function
+      await authLogin(email, password);
+      // No need to redirect here as the auth hook will handle it
+
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || "Login failed. Please try again.");
     } finally {
-      setIsLoading(false);
+      setLocalLoading(false);
     }
   };
 
@@ -116,7 +119,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button variant="outline" className="w-full rounded-full" onClick={handleGoogleLogin} disabled={isLoading}>
-            <Google className="mr-2 h-4 w-4" />
+            <LogIn className="mr-2 h-4 w-4" />
             Sign in with Google
           </Button>
           <div className="relative">
