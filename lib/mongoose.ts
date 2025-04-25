@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 // Get MongoDB URI from environment variables or use a fallback for local development
-const MONGODB_URI = "mongodb://localhost:27017";
+const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
   throw new Error(
