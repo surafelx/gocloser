@@ -43,7 +43,7 @@ import {
   usePaymentMethods,
   AddPaymentMethod,
 } from "@/hooks/use-payment-methods";
-import { SUBSCRIPTION_PLANS } from "@/lib/stripe";
+import { SUBSCRIPTION_PLANS } from "@/lib/whop";
 
 // Create a simple error boundary component since React's ErrorBoundary is class-based
 const ErrorBoundary = ({ children, FallbackComponent, onError }: {

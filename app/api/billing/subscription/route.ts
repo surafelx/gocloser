@@ -3,7 +3,7 @@ import dbConnect from "@/lib/mongoose";
 import { getCurrentUser } from "@/lib/auth";
 import User from "@/models/User";
 import Subscription from "@/models/Subscription";
-import stripe, { getPlanById } from "@/lib/stripe";
+import { getPlanById, createCheckoutLink, cancelMembership, reactivateMembership } from "@/lib/whop";
 import { ensureMockUserExists, MOCK_USER_ID } from "@/lib/dev-mock-user";
 
 // GET endpoint to retrieve subscription details
@@ -97,92 +97,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check if user already has a Stripe customer ID
-    let stripeCustomerId = user.stripeCustomerId;
-
-    // If not, create a new customer in Stripe
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: user.name,
-        metadata: {
-          userId: user._id.toString(),
-        },
-      });
-
-      stripeCustomerId = customer.id;
-
-      // Update user with Stripe customer ID
-      await User.updateOne({ _id: user._id }, { $set: { stripeCustomerId } });
-    }
-
-    // Get success and cancel URLs from the request or use defaults
-    const origin = request.headers.get("origin") || "http://localhost:3000";
-
-    // Get the auth token from the request cookies
-    const authToken = request.cookies.get('auth_token')?.value || '';
-
-    // Include the auth token in the success and cancel URLs to maintain the session
-    const successUrl = `${origin}/billing?success=true&plan=${planId}&session_preserved=true`;
-    const cancelUrl = `${origin}/billing?canceled=true&session_preserved=true`;
-
-    // Validate that the price ID exists
-    if (!plan.priceId || plan.priceId.startsWith('price_1PbXXXXXXXXXXXXXXXXXXXXX')) {
+    // Check if Whop API key is properly configured
+    if (!process.env.WHOP_API_KEY || process.env.WHOP_API_KEY.length < 10) {
+      console.error("WHOP_API_KEY is missing or invalid");
       return NextResponse.json(
         {
-          error: `The price ID for the ${plan.name} plan is not configured correctly. Please contact support.`,
-          details: "You need to create products and prices in Stripe and update the environment variables."
-        },
-        { status: 400 }
-      );
-    }
-
-    // Check if Stripe API key is properly configured
-    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.length < 10) {
-      console.error("STRIPE_SECRET_KEY is missing or invalid");
-      return NextResponse.json(
-        {
-          error: "Stripe is not properly configured",
-          details: "The STRIPE_SECRET_KEY environment variable is missing or invalid. Please check your environment configuration."
+          error: "Whop is not properly configured",
+          details: "The WHOP_API_KEY environment variable is missing or invalid. Please check your environment configuration."
         },
         { status: 500 }
       );
     }
 
-    // Create a checkout session
+    // Create a checkout link with Whop
     try {
-      const session = await stripe.checkout.sessions.create({
-        customer: stripeCustomerId,
-        line_items: [
-          {
-            price: plan.priceId,
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          userId: user._id.toString(),
-          planId: plan.id,
-        },
-      });
+      const checkoutUrl = await createCheckoutLink(
+        planId,
+        user._id.toString(),
+        user.email
+      );
 
       // Return the checkout URL
-      return NextResponse.json({ url: session.url });
-    } catch (stripeError: any) {
-      console.error("Stripe checkout session error:", stripeError);
+      return NextResponse.json({ url: checkoutUrl });
+    } catch (whopError: any) {
+      console.error("Whop checkout link error:", whopError);
 
-      // Check if the error is related to the Stripe API key
-      const errorMessage = stripeError.message || "Failed to create checkout session";
+      // Check if the error is related to the Whop API key
+      const errorMessage = whopError.message || "Failed to create checkout link";
       const isAuthError = errorMessage.includes("Invalid API Key") ||
-                          errorMessage.includes("No API key") ||
-                          errorMessage.includes("authentication");
+                        errorMessage.includes("No API key") ||
+                        errorMessage.includes("authentication");
 
-      let details = "There was an issue with the Stripe integration. Please check your Stripe configuration.";
+      let details = "There was an issue with the Whop integration. Please check your Whop configuration.";
 
       if (isAuthError) {
-        details = "The Stripe API key appears to be invalid or missing. Please check your STRIPE_SECRET_KEY environment variable.";
+        details = "The Whop API key appears to be invalid or missing. Please check your WHOP_API_KEY environment variable.";
       }
 
       return NextResponse.json(
@@ -241,13 +190,13 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Check if Stripe API key is properly configured
-    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.length < 10) {
-      console.error("STRIPE_SECRET_KEY is missing or invalid");
+    // Check if Whop API key is properly configured
+    if (!process.env.WHOP_API_KEY || process.env.WHOP_API_KEY.length < 10) {
+      console.error("WHOP_API_KEY is missing or invalid");
       return NextResponse.json(
         {
-          error: "Stripe is not properly configured",
-          details: "The STRIPE_SECRET_KEY environment variable is missing or invalid. Please check your environment configuration."
+          error: "Whop is not properly configured",
+          details: "The WHOP_API_KEY environment variable is missing or invalid. Please check your environment configuration."
         },
         { status: 500 }
       );
@@ -258,14 +207,20 @@ export async function PUT(request: NextRequest) {
       switch (action) {
         case "cancel":
           try {
-            // Cancel subscription at period end
-            await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-              cancel_at_period_end: true,
-            });
-          } catch (stripeError) {
-            console.error("Stripe error when canceling subscription:", stripeError);
-            // Continue with database update even if Stripe fails
-            console.log("Proceeding with database update despite Stripe error");
+            // Check if we have a Whop membership ID
+            if (subscription.whopMembershipId) {
+              // Cancel subscription at period end
+              await cancelMembership(subscription.whopMembershipId);
+            } else if (subscription.stripeSubscriptionId) {
+              // Legacy Stripe subscription - just update the database
+              console.log("Legacy Stripe subscription - updating database only");
+            } else {
+              throw new Error("No valid subscription ID found");
+            }
+          } catch (apiError) {
+            console.error("API error when canceling subscription:", apiError);
+            // Continue with database update even if API fails
+            console.log("Proceeding with database update despite API error");
           }
 
           // Update subscription in database
@@ -282,14 +237,20 @@ export async function PUT(request: NextRequest) {
 
         case "reactivate":
           try {
-            // Reactivate subscription
-            await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-              cancel_at_period_end: false,
-            });
-          } catch (stripeError) {
-            console.error("Stripe error when reactivating subscription:", stripeError);
-            // Continue with database update even if Stripe fails
-            console.log("Proceeding with database update despite Stripe error");
+            // Check if we have a Whop membership ID
+            if (subscription.whopMembershipId) {
+              // Reactivate subscription
+              await reactivateMembership(subscription.whopMembershipId);
+            } else if (subscription.stripeSubscriptionId) {
+              // Legacy Stripe subscription - just update the database
+              console.log("Legacy Stripe subscription - updating database only");
+            } else {
+              throw new Error("No valid subscription ID found");
+            }
+          } catch (apiError) {
+            console.error("API error when reactivating subscription:", apiError);
+            // Continue with database update even if API fails
+            console.log("Proceeding with database update despite API error");
           }
 
           // Update subscription in database

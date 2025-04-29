@@ -3,9 +3,15 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 // Define the Subscription interface
 export interface ISubscription extends Document {
   userId: mongoose.Types.ObjectId;
-  stripeCustomerId: string;
-  stripeSubscriptionId: string;
-  stripePriceId: string;
+  // Stripe fields (kept for backward compatibility)
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripePriceId?: string;
+  // Whop fields
+  whopUserId?: string;
+  whopMembershipId?: string;
+  whopPlanId?: string;
+  // Common fields
   planId: string;
   planName: string;
   status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete' | 'incomplete_expired' | 'unpaid';
@@ -27,18 +33,36 @@ const SubscriptionSchema = new Schema<ISubscription>(
       required: true,
       unique: true,
     },
+    // Stripe fields (kept for backward compatibility)
     stripeCustomerId: {
       type: String,
-      required: true,
+      required: false,
     },
     stripeSubscriptionId: {
       type: String,
-      required: true,
+      required: false,
+      sparse: true,
       unique: true,
     },
     stripePriceId: {
       type: String,
-      required: true,
+      required: false,
+    },
+    // Whop fields
+    whopUserId: {
+      type: String,
+      required: false,
+      sparse: true,
+    },
+    whopMembershipId: {
+      type: String,
+      required: false,
+      sparse: true,
+      unique: true,
+    },
+    whopPlanId: {
+      type: String,
+      required: false,
     },
     planId: {
       type: String,

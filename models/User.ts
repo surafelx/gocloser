@@ -8,7 +8,8 @@ export interface IUser extends Document {
   name: string;
   googleId?: string;
   profilePicture?: string;
-  stripeCustomerId?: string;
+  stripeCustomerId?: string; // Keep for backward compatibility
+  whopUserId?: string;
   hasActiveSubscription: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -44,6 +45,11 @@ const UserSchema = new Schema<IUser>(
       type: String,
     },
     stripeCustomerId: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
+    whopUserId: {
       type: String,
       sparse: true,
       unique: true,

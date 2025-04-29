@@ -3,9 +3,15 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 // Define the Payment interface
 export interface IPayment extends Document {
   userId: mongoose.Types.ObjectId;
-  stripeCustomerId: string;
-  stripeInvoiceId: string;
-  stripePaymentIntentId: string;
+  // Stripe fields (kept for backward compatibility)
+  stripeCustomerId?: string;
+  stripeInvoiceId?: string;
+  stripePaymentIntentId?: string;
+  // Whop fields
+  whopUserId?: string;
+  whopMembershipId?: string;
+  whopPaymentId?: string;
+  // Common fields
   amount: number;
   currency: string;
   status: 'paid' | 'unpaid' | 'no_payment_required' | 'failed';
@@ -27,17 +33,35 @@ const PaymentSchema = new Schema<IPayment>(
       ref: 'User',
       required: true,
     },
+    // Stripe fields (kept for backward compatibility)
     stripeCustomerId: {
       type: String,
-      required: true,
+      required: false,
     },
     stripeInvoiceId: {
       type: String,
-      required: true,
+      required: false,
+      sparse: true,
       unique: true,
     },
     stripePaymentIntentId: {
       type: String,
+      required: false,
+    },
+    // Whop fields
+    whopUserId: {
+      type: String,
+      required: false,
+    },
+    whopMembershipId: {
+      type: String,
+      required: false,
+    },
+    whopPaymentId: {
+      type: String,
+      required: false,
+      sparse: true,
+      unique: true,
     },
     amount: {
       type: Number,
