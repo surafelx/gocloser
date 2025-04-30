@@ -44,58 +44,41 @@ export const SUBSCRIPTION_PLANS = {
     description: "Basic access with limited features",
     price: 0,
     priceId: "", // No Stripe price ID for free plan
-    tokenLimit: 100000, // 100k tokens for free users
+    tokenLimit: 100000, // 100k tokens for free trial
     features: [
-      "Limited AI coaching sessions",
-      "Basic sales call analysis",
-      "2 file uploads per month",
+      "Limited chat sessions",
+      "Basic file analysis",
+      "2 file uploads",
       "Community support",
     ],
   },
   STARTER: {
     id: "starter",
     name: "Starter",
-    description: "Perfect for individual sales professionals",
-    price: 29,
+    description: "Chat + Uploads Only",
+    price: 19,
     priceId: "price_1REWoTECvX5ewvciUJ0zM0rc",
-
-    tokenLimit: 100000,
+    tokenLimit: 500000, // 500k tokens/month
     features: [
-      "Unlimited AI coaching sessions",
-      "Basic sales call analysis",
-      "5 file uploads per month",
-      "Email support",
+      "Gemini chat from file uploads",
+      "~500K tokens/month",
+      "File upload support",
+      "Standard support",
     ],
   },
   PROFESSIONAL: {
     id: "professional",
-    name: "Professional",
-    description: "For serious sales professionals",
-    price: 79,
+    name: "Pro",
+    description: "Chat + Uploads + 48 hrs Voice",
+    price: 39,
     priceId: "price_1REWoUECvX5ewvci8lNRIlil",
-    tokenLimit: 500000,
+    tokenLimit: 1000000, // 1M tokens/month
     features: [
       "Everything in Starter",
-      "Advanced performance analytics",
-      "Unlimited file uploads",
+      "48 hours Whisper transcription/month",
+      "~1M tokens/month",
+      "Audio/video uploads",
       "Priority support",
-      "Custom training data integration",
-    ],
-  },
-  TEAM: {
-    id: "team",
-    name: "Team",
-    description: "For sales teams and organizations",
-    price: 199,
-    priceId: "price_1REWoVECvX5ewvciTRxQ0YKo",
-    tokenLimit: 2000000,
-    features: [
-      "Everything in Professional",
-      "Team analytics dashboard",
-      "Admin controls",
-      "Dedicated account manager",
-      "Custom AI training",
-      "API access",
     ],
   },
 };

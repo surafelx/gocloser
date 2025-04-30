@@ -438,32 +438,94 @@ export default function ChatPage() {
             formData.append('file', selectedFile)
             formData.append('fileType', fileType)
 
-            // Show a processing message
-            setProcessingError(`Transcribing ${fileType} content. This may take a moment...`)
-            updateProgress(40)
-
-            // Send the file to the server for transcription
-            const response = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData,
-            })
-
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || `Failed to transcribe ${fileType} file. Server returned ${response.status}`)
+            // Show a detailed processing message
+            if (fileType === "video") {
+              setProcessingError(`Processing video: extracting audio and transcribing content. This may take a moment...`)
+            } else {
+              setProcessingError(`Transcribing ${fileType} content. This may take a moment...`)
             }
 
-            const data = await response.json()
-            fileContent = data.transcript || `[${fileType.toUpperCase()} content could not be transcribed]`
+            // Update progress to show we're starting the transcription process
+            updateProgress(20)
 
-            // Show success message
-            setProcessingError(`Successfully transcribed ${fileType} content. Analyzing...`)
+            // Set up a progress simulation for better UX
+            const progressInterval = setInterval(() => {
+              updateProgress(prev => {
+                // Simulate progress up to 90% (leave room for final steps)
+                const newProgress = Math.min(prev + (Math.random() * 3), 90);
+                return newProgress;
+              });
+            }, 1000);
+
+            let responseData;
+            try {
+              // Send the file to the server for transcription
+              const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData,
+              })
+
+              // Clear the progress interval
+              clearInterval(progressInterval);
+
+              if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || `Failed to transcribe ${fileType} file. Server returned ${response.status}`)
+              }
+
+              // Set progress to 95% to indicate we're almost done
+              updateProgress(95)
+
+              // Get the response data
+              responseData = await response.json()
+            } catch (error) {
+              // Clear the progress interval if there's an error
+              clearInterval(progressInterval);
+              throw error;
+            }
+
+            // Validate the transcript content
+            if (!responseData?.transcript || responseData.transcript === 'undefined' || responseData.transcript.trim() === '') {
+              console.warn('Received empty or undefined transcript from API');
+              fileContent = `[${fileType.toUpperCase()} content could not be transcribed]`;
+            } else {
+              console.log('Transcript received successfully:', responseData.transcript.substring(0, 100) + '...');
+              fileContent = responseData.transcript;
+            }
+
+            // Get the transcription method if available
+            const transcriptionMethod = responseData?.transcriptionMethod || 'unknown';
+
+            // Show success message with transcription method
+            setProcessingError(`Successfully transcribed ${fileType} content using ${transcriptionMethod}. Analyzing...`)
 
             // Update progress
             updateProgress(80)
           } catch (error) {
             console.error("Media file processing error:", error)
-            setProcessingError(`Failed to transcribe ${fileType} file. The file might be corrupted or in an unsupported format.`)
+
+            // Provide more specific error messages based on the error
+            let errorMessage = `Failed to transcribe ${fileType} file. The file might be corrupted or in an unsupported format.`
+
+            if (error instanceof Error) {
+              if (error.message.includes('Whisper') && error.message.includes('Google')) {
+                errorMessage = `Transcription failed with both services. Please try a different ${fileType} file or format.`
+              } else if (error.message.includes('extract audio')) {
+                errorMessage = `Could not extract audio from video. Please try a different video format or upload an audio file directly.`
+              } else if (error.message.includes('file size')) {
+                errorMessage = `File is too large. Please upload a smaller file (max 10MB).`
+              }
+            }
+
+            setProcessingError(errorMessage)
+
+            // Show toast notification for better visibility
+            toast({
+              title: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} Processing Error`,
+              description: errorMessage,
+              variant: 'destructive',
+            })
+
             handleFileError(error, () => {
               setSelectedFile(null)
               resetProcessing()
@@ -979,20 +1041,25 @@ I recommend practicing these techniques in our chat interface. Would you like to
             ) : (
               <>
                 {messages.length > 0 ? (
-                  // Sort messages to ensure correct order (user messages first, then AI responses)
-                  [...messages]
+                  messages
                     .sort((a, b) => {
-                      // If messages have the same timestamp (from the ID), maintain original order
+                      // If messages have the same ID, maintain original order
                       if (a.id === b.id) return 0;
-
-                      // Extract timestamp from ID (assuming ID is timestamp-based)
-                      const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
-                      const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
-
-                      // Sort by timestamp
+                      
+                      // Convert IDs to numbers for comparison, fallback to 0 if conversion fails
+                      const aTime = Number(a.id) || 0;
+                      const bTime = Number(b.id) || 0;
+                      
                       return aTime - bTime;
                     })
-                    .map(renderMessage)
+                    .map((message) => (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        isLoading={isLoading}
+                        onShowPerformance={(msg) => setCurrentAnalysis(msg)}
+                      />
+                    ))
                 ) : (
                   <div className="p-4 text-center">
                     <p className="text-muted-foreground">No messages to display. Start a conversation!</p>

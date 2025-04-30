@@ -16,6 +16,8 @@ import {
   Settings,
   LogOut,
   Sparkles,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,6 +42,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/contexts/chat-context";
 import AnimatedElement from "@/components/animated-element";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { LoadingSpinner } from "@/components/chat/loading-spinner";
 
 interface Chat {
   id: string;
@@ -55,8 +59,9 @@ export function ChatSidebar() {
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const { createChat, setCurrentChatId, generateTitle, updateChat } = useChat();
+  const isMobile = useIsMobile();
 
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(!isMobile); // Closed by default on mobile
   const [chats, setChats] = useState<Chat[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -69,10 +74,13 @@ export function ChatSidebar() {
   // Auto-generate title for a chat if needed
   const autoGenerateTitleIfNeeded = useCallback(async (chatId: string, chatMessages: any[]) => {
     try {
-      // Add this chat to the generating titles list
-      setGeneratingTitleForChats(prev => [...prev, chatId]);
+      // Only generate title if it's still "New Chat"
+      const chat = chats.find(c => c.id === chatId);
+      if (!chat || chat.title !== "New Chat") {
+        return null;
+      }
 
-      // Check if the chat has a default title and at least 2 user messages
+      // Check if the chat has at least 2 user messages
       const userMessages = chatMessages.filter((msg: any) => msg.role === "user");
       if (userMessages.length >= 2) {
         // Generate a title using the Gemini API
@@ -81,8 +89,6 @@ export function ChatSidebar() {
         if (newTitle && newTitle !== 'New Chat') {
           // Update the chat with the new title
           await updateChat(newTitle);
-
-          // Return the new title
           return newTitle;
         }
       }
@@ -90,11 +96,8 @@ export function ChatSidebar() {
     } catch (error) {
       console.error("Error auto-generating title:", error);
       return null;
-    } finally {
-      // Remove this chat from the generating titles list
-      setGeneratingTitleForChats(prev => prev.filter(id => id !== chatId));
     }
-  }, [generateTitle, updateChat]);
+  }, [generateTitle, updateChat, chats]);
 
   // Fetch chat history
   const fetchChats = useCallback(async () => {
@@ -191,6 +194,11 @@ export function ChatSidebar() {
   useEffect(() => {
     fetchChats();
   }, [fetchChats]);
+
+  // Update isOpen state when screen size changes
+  useEffect(() => {
+    setIsOpen(!isMobile);
+  }, [isMobile]);
 
   // Filter chats based on search query
   const filteredChats = chats.filter((chat) =>
@@ -458,42 +466,74 @@ export function ChatSidebar() {
   };
 
   return (
-    <div
-      className={`flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 ${
-        isOpen ? "w-80" : "w-0"
-      }`}
-    >
-      {isOpen && (
-        <AnimatedElement type="fade-in" duration={300}>
+    <>
+      {/* Minimized sidebar for mobile - only shows when sidebar is closed */}
+      {!isOpen && isMobile && (
+        <div className="flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 w-14">
           <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-2 font-bold text-xl">
-                <span className="text-primary animate-pulse-glow">
-                  GoCloser
-                </span>
-              </div>
+            {/* Toggle button */}
+            <div className="flex justify-center p-3">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsOpen(false)}
-                className="md:hidden"
+                onClick={() => setIsOpen(true)}
+                className="rounded-full"
               >
-                <MoreVertical className="h-5 w-5" />
+                <ChevronRight className="h-5 w-5" />
               </Button>
             </div>
 
-            {/* New Chat Button */}
-            <div className="px-4 pb-2">
+            {/* New Chat Button (minimized) */}
+            <div className="px-2 pb-2">
               <Button
                 variant="gradient"
-                className="w-full justify-start gap-2 rounded-lg"
+                className="w-full justify-center rounded-full aspect-square"
                 onClick={handleNewChat}
+                title="New Chat"
               >
                 <Plus className="h-4 w-4" />
-                New Chat
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full sidebar */}
+      <div
+        className={`flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 ${
+          isOpen ? "w-80" : "w-0"
+        }`}
+      >
+        {isOpen && (
+          <AnimatedElement type="fade-in" duration={300}>
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-2 font-bold text-xl">
+                  <span className="text-primary animate-pulse-glow">
+                    GoCloser
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+              </div>
+
+              {/* New Chat Button */}
+              <div className="px-4 pb-2">
+                <Button
+                  variant="gradient"
+                  className="w-full justify-start gap-2 rounded-lg"
+                  onClick={handleNewChat}
+                >
+                  <Plus className="h-4 w-4" />
+                  New Chat
+                </Button>
+              </div>
 
             {/* Search */}
             <div className="px-4 pb-2">
@@ -513,13 +553,8 @@ export function ChatSidebar() {
             {/* Chat List */}
             <ScrollArea className="flex-1 px-2">
               {isLoading ? (
-                <div className="flex flex-col gap-2 px-2">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-16 rounded-lg bg-accent/30 animate-pulse"
-                    />
-                  ))}
+                <div className="flex flex-col items-center justify-center h-40">
+                  <LoadingSpinner size="lg" text="Loading chats..." />
                 </div>
               ) : filteredChats.length > 0 ? (
                 <div className="flex flex-col gap-1 px-2">
@@ -556,16 +591,7 @@ export function ChatSidebar() {
                           <>
                             <div className="flex items-center gap-2">
                               <MessageSquare className="h-4 w-4 text-primary flex-shrink-0" />
-                              <p className="font-medium truncate">
-                                {generatingTitleForChats.includes(chat.id) ? (
-                                  <span className="flex items-center gap-1">
-                                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                                    Generating title...
-                                  </span>
-                                ) : (
-                                  chat.title
-                                )}
-                              </p>
+                              <p className="font-medium truncate">{chat.title}</p>
                             </div>
                             <p className="text-xs text-muted-foreground truncate">
                               {chat.preview}
@@ -585,13 +611,19 @@ export function ChatSidebar() {
                                   className="h-7 w-7"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleGenerateTitle(chat.id);
+                                    // Only allow generating title if it hasn't been generated before
+                                    if (chat.title === "New Chat") {
+                                      handleGenerateTitle(chat.id);
+                                    }
                                   }}
+                                  disabled={chat.title !== "New Chat"}
                                 >
                                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Generate AI title</TooltipContent>
+                              <TooltipContent>
+                                {chat.title === "New Chat" ? "Generate AI title" : "Title already generated"}
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
 
@@ -710,5 +742,6 @@ export function ChatSidebar() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }
