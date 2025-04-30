@@ -29,7 +29,7 @@ export function initCloudinary() {
   return cloudinary;
 }
 
-// Upload a file to Cloudinary with retry logic
+// Upload a file to Cloudinary with retry logic - no local storage
 export async function uploadToCloudinary(
   buffer: Buffer,
   options: {
@@ -37,6 +37,7 @@ export async function uploadToCloudinary(
     resourceType?: "auto" | "image" | "video" | "raw";
     publicId?: string;
     maxRetries?: number;
+    fileType?: string; // Added to help determine resource type
   } = {}
 ) {
   const cloudinary = initCloudinary();
@@ -48,11 +49,34 @@ export async function uploadToCloudinary(
     apiSecret: process.env.CLOUDINARY_API_SECRET ? "Set" : "Missing",
   });
 
+  // Determine the correct resource type based on fileType if provided
+  let resourceType = options.resourceType || "auto";
+  if (options.fileType) {
+    if (options.fileType.startsWith('audio/')) {
+      // Audio files should use 'video' resource type in Cloudinary
+      resourceType = "video";
+      console.log("Detected audio file, using 'video' resource type for Cloudinary");
+    } else if (options.fileType.startsWith('video/')) {
+      resourceType = "video";
+      console.log("Detected video file, using 'video' resource type");
+    } else if (options.fileType.startsWith('image/')) {
+      resourceType = "image";
+      console.log("Detected image file, using 'image' resource type");
+    }
+  }
+
+  // Create optimized upload options for serverless environment
   const uploadOptions = {
-    resource_type: options.resourceType || "auto",
+    resource_type: resourceType,
     folder: options.folder || "uploads",
     public_id: options.publicId || `file_${Date.now()}`,
-    timeout: 120000, // 120 second timeout
+    // Optimize for Vercel
+    timeout: 8000,
+    use_filename: true,
+    unique_filename: true,
+    overwrite: true,
+    // Disable any processing that might cause timeouts
+    eager_async: true,
   };
 
   console.log("Upload options:", JSON.stringify(uploadOptions));
@@ -66,13 +90,10 @@ export async function uploadToCloudinary(
     console.log(`Cloudinary upload attempt ${attempt}/${maxRetries}`);
 
     try {
-      // Use Cloudinary's upload API with a buffer
+      // Try a simpler approach for Vercel
       return await new Promise((resolve, reject) => {
-        // Create a temporary file name for the buffer
-        const fileName = `temp_${Date.now()}.${getFileExtension(options.resourceType)}`;
-
-        // Use Cloudinary's upload API directly with buffer
-        cloudinary.uploader.upload_stream(
+        // Create a buffer upload stream
+        const uploadStream = cloudinary.uploader.upload_stream(
           uploadOptions,
           (error, result) => {
             if (error) {
@@ -83,7 +104,17 @@ export async function uploadToCloudinary(
               resolve(result);
             }
           }
-        ).end(buffer);
+        );
+
+        // Handle stream errors
+        uploadStream.on('error', (error) => {
+          console.error(`Stream error on attempt ${attempt}:`, error);
+          reject(error);
+        });
+
+        // Write buffer to stream and end
+        uploadStream.write(buffer);
+        uploadStream.end();
       });
     } catch (error: any) {
       lastError = error;
@@ -95,8 +126,8 @@ export async function uploadToCloudinary(
         throw new Error(`Failed to upload to Cloudinary after ${maxRetries} attempts: ${error.message}`);
       }
 
-      // Wait before retrying (exponential backoff)
-      const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+      // Wait before retrying (shorter backoff for Vercel)
+      const delay = Math.min(500 * Math.pow(2, attempt), 5000);
       console.log(`Waiting ${delay}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -106,33 +137,75 @@ export async function uploadToCloudinary(
   throw lastError || new Error('Failed to upload to Cloudinary');
 }
 
-// Helper function to determine MIME type based on resource type
-function getMimeType(resourceType?: string): string {
-  switch (resourceType) {
-    case 'image':
-      return 'image/jpeg';
-    case 'video':
-      return 'video/mp4';
-    case 'raw':
-      return 'application/octet-stream';
-    case 'auto':
-    default:
-      return 'application/octet-stream';
-  }
-}
+// Note: These helper functions were removed as they're not currently used
+// If needed in the future, they can be re-implemented
 
-// Helper function to get file extension based on resource type
-function getFileExtension(resourceType?: string): string {
-  switch (resourceType) {
-    case 'image':
-      return 'jpg';
-    case 'video':
-      return 'mp4';
-    case 'raw':
-      return 'bin';
-    case 'auto':
-    default:
-      return 'bin';
+// Alternative upload method that might work better on Vercel
+export async function uploadToCloudinaryAlternative(
+  buffer: Buffer,
+  options: {
+    folder?: string;
+    resourceType?: "auto" | "image" | "video" | "raw";
+    publicId?: string;
+    fileType?: string; // Added to help determine resource type
+  } = {}
+) {
+  const cloudinary = initCloudinary();
+
+  console.log("Using alternative upload method for Vercel");
+
+  // Convert buffer to base64
+  const base64Data = buffer.toString('base64');
+
+  // Determine the correct resource type based on fileType if provided
+  let resourceType = options.resourceType || "auto";
+  if (options.fileType) {
+    if (options.fileType.startsWith('audio/')) {
+      // Audio files should use 'video' resource type in Cloudinary
+      resourceType = "video";
+      console.log("Detected audio file, using 'video' resource type for Cloudinary");
+    } else if (options.fileType.startsWith('video/')) {
+      resourceType = "video";
+      console.log("Detected video file, using 'video' resource type");
+    } else if (options.fileType.startsWith('image/')) {
+      resourceType = "image";
+      console.log("Detected image file, using 'image' resource type");
+    }
+  }
+
+  // Determine data URI prefix based on resource type
+  let dataUriPrefix = 'data:application/octet-stream;base64,';
+  if (resourceType === 'image') {
+    dataUriPrefix = 'data:image/jpeg;base64,';
+  } else if (resourceType === 'video') {
+    dataUriPrefix = 'data:video/mp4;base64,';
+  }
+
+  // Create upload options optimized for Vercel
+  const uploadOptions = {
+    resource_type: resourceType,
+    folder: options.folder || "uploads",
+    public_id: options.publicId || `file_${Date.now()}`,
+    timeout: 8000,
+    // Optimize for Vercel
+    eager_async: true,
+    use_filename: true,
+    unique_filename: true,
+    overwrite: true,
+  };
+
+  try {
+    // Use the upload method with a data URI
+    const result = await cloudinary.uploader.upload(
+      `${dataUriPrefix}${base64Data}`,
+      uploadOptions
+    );
+
+    console.log("Alternative upload successful");
+    return result;
+  } catch (error: any) {
+    console.error("Alternative upload failed:", error);
+    throw error;
   }
 }
 

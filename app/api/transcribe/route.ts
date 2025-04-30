@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractAudioFromVideo, transcribe } from "@/lib/google-speech";
-import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
+import {
+  uploadToCloudinary,
+  uploadToCloudinaryAlternative,
+  deleteFromCloudinary
+} from "@/lib/cloudinary";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -61,25 +65,31 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
       console.log(`Buffer size: ${buffer.length} bytes`);
 
-      // Determine resource type based on file type
-      let resourceType: "auto" | "image" | "video" | "raw" = "auto";
-      if (file.type.startsWith("image/")) {
-        resourceType = "image";
-      } else if (file.type.startsWith("video/")) {
-        resourceType = "video";
-      } else if (file.type.startsWith("audio/")) {
-        resourceType = "video"; // Audio files are handled as video in Cloudinary
+      console.log(`File MIME type: ${file.type}`);
+
+      // Try the primary upload method first
+      try {
+        console.log("Trying primary upload method...");
+        uploadResponse = await uploadToCloudinary(buffer, {
+          folder: "temp_transcriptions",
+          publicId: `temp_${Date.now()}`,
+          fileType: file.type, // Pass the file type to help determine resource type
+          maxRetries: 3
+        });
+      } catch (primaryError) {
+        // If primary method fails, try the alternative method
+        console.log("Primary upload method failed, trying alternative...");
+        console.error("Primary upload error:", primaryError);
+
+        // Add a small delay before trying alternative method
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        uploadResponse = await uploadToCloudinaryAlternative(buffer, {
+          folder: "temp_transcriptions",
+          publicId: `temp_${Date.now()}_alt`,
+          fileType: file.type // Pass the file type to help determine resource type
+        });
       }
-
-      console.log(`Using resource type: ${resourceType}`);
-
-      // Use the utility function to upload to Cloudinary with more retries
-      uploadResponse = await uploadToCloudinary(buffer, {
-        folder: "temp_transcriptions",
-        publicId: `temp_${Date.now()}`,
-        resourceType: resourceType,
-        maxRetries: 5 // Increase retries for reliability
-      });
 
       console.log("Upload response received:", JSON.stringify(uploadResponse));
 
