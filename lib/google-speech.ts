@@ -5,6 +5,7 @@ import path from "path";
 import { SpeechClient } from "@google-cloud/speech";
 import axios from "axios";
 import os from "os";
+import { getAudioUrlFromVideo, getCloudinaryBuffer, createAudioFromVideo } from "./cloudinary";
 
 const execPromise = util.promisify(exec);
 
@@ -33,24 +34,51 @@ process.env.GOOGLE_APPLICATION_CREDENTIALS = GOOGLE_CREDENTIALS_PATH;
 // Now you can use the credentials for Google APIs
 console.log('Google credentials written to:', GOOGLE_CREDENTIALS_PATH);
 export const transcribeWithWhisper = async (
-  audioFilePath: string
+  audioInput: string | Buffer
 ): Promise<string> => {
-  // Check if the file exists
-  if (!fs.existsSync(audioFilePath)) {
-    throw new Error(`Audio file not found for Whisper transcription: ${audioFilePath}`);
-  }
-
   // Use FormData from the form-data package for Node.js
   const FormData = require('form-data');
   const formData = new FormData();
 
   try {
-    formData.append("file", fs.createReadStream(audioFilePath));
+    // Handle both file paths and buffers
+    if (typeof audioInput === 'string') {
+      // It's a file path or URL
+      if (audioInput.startsWith('http')) {
+        // It's a URL, fetch the buffer
+        console.log(`Fetching audio from URL for Whisper: ${audioInput}`);
+        const buffer = await getCloudinaryBuffer(audioInput);
+
+        // Create a temporary file name for the buffer
+        const fileName = `whisper_audio_${Date.now()}.mp3`;
+
+        // Append the buffer to the form
+        formData.append("file", buffer, { filename: fileName });
+      } else {
+        // It's a local file path, check if it exists
+        if (!fs.existsSync(audioInput)) {
+          throw new Error(`Audio file not found for Whisper transcription: ${audioInput}`);
+        }
+
+        console.log(`Sending local audio file to Whisper API: ${audioInput}`);
+        formData.append("file", fs.createReadStream(audioInput));
+      }
+    } else {
+      // It's a buffer
+      console.log(`Sending audio buffer to Whisper API (${audioInput.length} bytes)`);
+
+      // Create a temporary file name for the buffer
+      const fileName = `whisper_audio_${Date.now()}.mp3`;
+
+      // Append the buffer to the form
+      formData.append("file", audioInput, { filename: fileName });
+    }
+
+    // Add other required parameters
     formData.append("model", "whisper-1");
     formData.append("language", "en");
 
-    console.log(`Sending audio file to Whisper API: ${audioFilePath}`);
-
+    // Send the request to the Whisper API
     const response = await axios.post(
       "https://api.openai.com/v1/audio/transcriptions",
       formData,
@@ -145,62 +173,53 @@ export const transcribe = async (audioFilePath: string): Promise<string> => {
   // Check if the path is a URL
   const isUrl = audioFilePath.startsWith('http://') || audioFilePath.startsWith('https://');
 
-  // If it's a URL, we need to download it first
-  let localAudioPath = audioFilePath;
-
-  if (isUrl) {
-    console.log(`Audio path is a URL: ${audioFilePath}`);
-    try {
-      // Download the audio file to a temporary location
-      const tempDir = path.join(os.tmpdir(), 'audio_processing');
-      fs.mkdirSync(tempDir, { recursive: true });
-
-      const tempAudioPath = path.join(tempDir, `temp_audio_${Date.now()}.mp3`);
-      console.log(`Downloading audio from ${audioFilePath} to ${tempAudioPath}`);
-
-      // Download the audio file
-      const response = await axios({
-        method: 'get',
-        url: audioFilePath,
-        responseType: 'stream'
-      });
-
-      const writer = fs.createWriteStream(tempAudioPath);
-      response.data.pipe(writer);
-
-      await new Promise<void>((resolve, reject) => {
-        writer.on('finish', () => resolve());
-        writer.on('error', (err) => reject(err));
-      });
-
-      localAudioPath = tempAudioPath;
-      console.log(`Audio downloaded to: ${localAudioPath}`);
-    } catch (error: any) {
-      throw new Error(`Failed to download audio file: ${error.message}`);
-    }
-  } else {
-    // For local files, check if they exist
-    if (!fs.existsSync(audioFilePath)) {
-      throw new Error(`Audio file not found: ${audioFilePath}`);
-    }
+  // For Cloudinary URLs, we'll use the URL directly with our updated transcription functions
+  // For local files, we'll check if they exist
+  if (!isUrl && !fs.existsSync(audioFilePath)) {
+    throw new Error(`Audio file not found: ${audioFilePath}`);
   }
 
-  const duration = getAudioDuration(localAudioPath);
-  const isLong = duration > 60;
+  // For URLs, we can't reliably get the duration in a serverless environment
+  // For local files, we can use ffprobe
+  let duration = 0;
+  let isLong = false;
+
+  if (!isUrl) {
+    try {
+      duration = getAudioDuration(audioFilePath);
+      isLong = duration > 60;
+      console.log(`Audio duration: ${duration} seconds, isLong: ${isLong}`);
+    } catch (error) {
+      console.warn("Could not determine audio duration, assuming it's not long");
+    }
+  } else {
+    console.log("Audio is a URL, cannot determine duration in serverless environment");
+    // For URLs, we'll assume it's not long to avoid splitting
+    isLong = false;
+  }
+
   let transcript = "";
 
   try {
-    const filesToTranscribe = isLong
-      ? splitAudio(localAudioPath)
-      : [localAudioPath];
+    // For URLs, we don't split the audio since we can't reliably do that in serverless
+    // For local files, we can split if needed
+    const filesToTranscribe = isLong && !isUrl
+      ? splitAudio(audioFilePath)
+      : [audioFilePath];
+
+    console.log(`Transcribing ${filesToTranscribe.length} audio segments`);
+
+    // Try Whisper first
     for (const chunkPath of filesToTranscribe) {
+      console.log(`Transcribing chunk: ${chunkPath}`);
       const chunkTranscript = await transcribeWithWhisper(chunkPath);
       transcript += chunkTranscript + "\n";
 
-      // Clean up chunk files
-      if (chunkPath !== localAudioPath) {
+      // Clean up chunk files if they're local temporary files
+      if (!isUrl && chunkPath !== audioFilePath) {
         try {
           fs.unlinkSync(chunkPath);
+          console.log(`Deleted chunk file: ${chunkPath}`);
         } catch (error) {
           console.error(`Error deleting chunk file ${chunkPath}:`, error);
         }
@@ -208,32 +227,28 @@ export const transcribe = async (audioFilePath: string): Promise<string> => {
     }
 
     console.log("Transcription successful with OpenAI Whisper.");
-
-    // Clean up the downloaded file if it was a URL
-    if (isUrl && localAudioPath !== audioFilePath) {
-      try {
-        fs.unlinkSync(localAudioPath);
-        console.log(`Deleted temporary audio file: ${localAudioPath}`);
-      } catch (error) {
-        console.error(`Error deleting temporary audio file: ${localAudioPath}`, error);
-      }
-    }
-
     return transcript.trim();
   } catch (err) {
     console.error("Whisper failed. Falling back to Google Speech.", err);
+
     try {
-      const filesToTranscribe = isLong
-        ? splitAudio(localAudioPath)
-        : [localAudioPath];
+      // For Google Speech, we also don't split URLs
+      const filesToTranscribe = isLong && !isUrl
+        ? splitAudio(audioFilePath)
+        : [audioFilePath];
+
+      console.log(`Transcribing ${filesToTranscribe.length} audio segments with Google Speech`);
+
       for (const chunkPath of filesToTranscribe) {
+        console.log(`Transcribing chunk with Google Speech: ${chunkPath}`);
         const chunkTranscript = await transcribeWithGoogleSpeech(chunkPath);
         transcript += chunkTranscript + "\n";
 
-        // Clean up chunk files
-        if (chunkPath !== localAudioPath) {
+        // Clean up chunk files if they're local temporary files
+        if (!isUrl && chunkPath !== audioFilePath) {
           try {
             fs.unlinkSync(chunkPath);
+            console.log(`Deleted chunk file: ${chunkPath}`);
           } catch (error) {
             console.error(`Error deleting chunk file ${chunkPath}:`, error);
           }
@@ -241,43 +256,49 @@ export const transcribe = async (audioFilePath: string): Promise<string> => {
       }
 
       console.log("Transcription successful with Google Speech.");
-
-      // Clean up the downloaded file if it was a URL
-      if (isUrl && localAudioPath !== audioFilePath) {
-        try {
-          fs.unlinkSync(localAudioPath);
-          console.log(`Deleted temporary audio file: ${localAudioPath}`);
-        } catch (error) {
-          console.error(`Error deleting temporary audio file: ${localAudioPath}`, error);
-        }
-      }
-
       return transcript.trim();
     } catch (error: any) {
-      // Clean up the downloaded file if it was a URL, even if transcription failed
-      if (isUrl && localAudioPath !== audioFilePath) {
-        try {
-          fs.unlinkSync(localAudioPath);
-          console.log(`Deleted temporary audio file after error: ${localAudioPath}`);
-        } catch (cleanupError) {
-          console.error(`Error deleting temporary audio file: ${localAudioPath}`, cleanupError);
-        }
-      }
-
       throw new Error(`Transcription failed: ${error.message}`);
     }
   }
 };
 
 export const transcribeWithGoogleSpeech = async (
-  audioFilePath: string
+  audioInput: string | Buffer
 ): Promise<string> => {
   const client = new SpeechClient({
     keyFilename: GOOGLE_CREDENTIALS_PATH,
   });
 
-  const file = fs.readFileSync(audioFilePath);
-  const audioBytes = file.toString("base64");
+  let audioBytes: string;
+
+  // Handle both file paths and URLs
+  if (typeof audioInput === 'string') {
+    // Check if it's a URL
+    if (audioInput.startsWith('http')) {
+      console.log(`Fetching audio from URL for Google Speech: ${audioInput}`);
+      try {
+        // Get the buffer from the URL
+        const buffer = await getCloudinaryBuffer(audioInput);
+        audioBytes = buffer.toString("base64");
+      } catch (error: any) {
+        throw new Error(`Failed to fetch audio from URL: ${error.message}`);
+      }
+    } else {
+      // It's a local file path
+      if (!fs.existsSync(audioInput)) {
+        throw new Error(`Audio file not found for Google Speech: ${audioInput}`);
+      }
+
+      console.log(`Reading local audio file for Google Speech: ${audioInput}`);
+      const file = fs.readFileSync(audioInput);
+      audioBytes = file.toString("base64");
+    }
+  } else {
+    // It's already a buffer
+    console.log(`Using provided buffer for Google Speech (${audioInput.length} bytes)`);
+    audioBytes = audioInput.toString("base64");
+  }
 
   const audio = {
     content: audioBytes,
@@ -297,10 +318,14 @@ export const transcribeWithGoogleSpeech = async (
   };
 
   try {
+    console.log("Sending request to Google Speech API");
     const [response] = await client.recognize(request);
+
     if (!response.results?.length) {
       throw new Error("No transcription results received");
     }
+
+    console.log(`Received ${response.results.length} results from Google Speech API`);
 
     return response.results
       .map((result: any) => result.alternatives?.[0]?.transcript || "")
@@ -319,58 +344,24 @@ export const extractAudioFromVideo = async (
     const isUrl = videoPath.startsWith('http://') || videoPath.startsWith('https://');
 
     if (isUrl) {
-      // For Cloudinary URLs, we can use their URL transformation API to get audio
-      // Example: https://res.cloudinary.com/demo/video/upload/v1234/sample.mp4
-      // becomes: https://res.cloudinary.com/demo/video/upload/f_mp3/v1234/sample.mp4
-
-      // Check if it's a Cloudinary URL
+      // For Cloudinary URLs, use our utility function to transform the URL
       if (videoPath.includes('cloudinary.com')) {
-        // Insert f_mp3 transformation before the version part of the URL
-        const audioUrl = videoPath.replace(/\/upload\//, '/upload/f_mp3/');
+        // Use Cloudinary's URL transformation to get audio URL
+        const audioUrl = getAudioUrlFromVideo(videoPath);
         console.log(`Using Cloudinary transformation for audio: ${audioUrl}`);
+
+        // Return the audio URL directly - our transcription functions now handle URLs
         return audioUrl;
       } else {
-        // For non-Cloudinary URLs, download the video first
-        const tempDir = path.join(os.tmpdir(), 'video_processing');
-        fs.mkdirSync(tempDir, { recursive: true });
-
-        const tempVideoPath = path.join(tempDir, `temp_video_${Date.now()}.mp4`);
-        const tempAudioPath = path.join(tempDir, `temp_audio_${Date.now()}.mp3`);
-
-        console.log(`Downloading video from ${videoPath} to ${tempVideoPath}`);
-
-        // Download the video file
-        const response = await axios({
-          method: 'get',
-          url: videoPath,
-          responseType: 'stream'
-        });
-
-        const writer = fs.createWriteStream(tempVideoPath);
-        response.data.pipe(writer);
-
-        await new Promise<void>((resolve, reject) => {
-          writer.on('finish', () => resolve());
-          writer.on('error', (err) => reject(err));
-        });
-
-        // Extract audio from the downloaded video
-        console.log(`Extracting audio from ${tempVideoPath} to ${tempAudioPath}`);
-        await execPromise(
-          `ffmpeg -i "${tempVideoPath}" -q:a 0 -map a "${tempAudioPath}" -y`
+        // For non-Cloudinary URLs, we can't process them in a serverless environment
+        // We would need to download the video, which isn't reliable on Vercel
+        throw new Error(
+          "Non-Cloudinary video URLs are not supported in serverless environments. Please upload to Cloudinary first."
         );
-
-        // Clean up the temporary video file
-        try {
-          fs.unlinkSync(tempVideoPath);
-        } catch (err: any) {
-          console.error(`Error deleting temporary video file: ${err.message}`);
-        }
-
-        return tempAudioPath;
       }
     } else {
-      // Handle local file paths as before
+      // Handle local file paths - this will only work in development, not on Vercel
+      console.warn("Local file processing will not work in production on Vercel");
       const audioPath = videoPath.replace(/\.[^/.]+$/, ".mp3");
       console.log(`Extracting audio from ${videoPath} to ${audioPath}`);
       await execPromise(

@@ -75,10 +75,14 @@ export async function POST(request: NextRequest) {
 
     // Transcribe the audio
     try {
+      console.log(`Starting transcription of: ${audioUrl}`);
       const transcript = await transcribe(audioUrl);
+
       if (!transcript) {
         throw new Error("Empty transcript received");
       }
+
+      console.log(`Transcription successful, length: ${transcript.length} characters`);
 
       // Add metadata
       const fileInfo = `\n\nFile: ${file.name} (${fileType})\nTranscribed at: ${new Date().toISOString()}`;
@@ -99,10 +103,25 @@ export async function POST(request: NextRequest) {
         transcript: finalTranscript,
         transcriptionMethod: "whisper",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Transcription error:", error);
+
+      // Provide more specific error messages based on the error
+      let errorMessage = "Failed to transcribe audio";
+
+      if (error.message.includes("Audio file not found")) {
+        errorMessage = "The audio file could not be accessed. Please try again with a different file.";
+      } else if (error.message.includes("Failed to download")) {
+        errorMessage = "Could not download the audio file from Cloudinary. Please try again.";
+      } else if (error.message.includes("Whisper") && error.message.includes("Google")) {
+        errorMessage = "Both transcription services failed. Please try a different audio format.";
+      }
+
       return NextResponse.json(
-        { error: "Failed to transcribe audio" },
+        {
+          error: errorMessage,
+          details: error.message
+        },
         { status: 500 }
       );
     }
