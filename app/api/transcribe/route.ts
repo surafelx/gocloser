@@ -6,10 +6,24 @@ import { uploadToCloudinary, deleteFromCloudinary } from "@/lib/cloudinary";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  console.log("Transcribe API route called");
+
   try {
+    // Log environment variables (without revealing secrets)
+    console.log("Environment check:", {
+      CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? "Set" : "Missing",
+      CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? "Set" : "Missing",
+      CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ? "Set" : "Missing",
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "Set" : "Missing",
+      NODE_ENV: process.env.NODE_ENV,
+    });
+
+    console.log("Parsing form data...");
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const fileType = formData.get("fileType") as string;
+
+    console.log(`Received file: ${file?.name}, type: ${file?.type}, size: ${file?.size} bytes, fileType param: ${fileType}`);
 
     // Validate file type
     const validAudioTypes = ["audio/wav", "audio/mp3", "audio/mpeg", "audio/webm"];
@@ -39,22 +53,51 @@ export async function POST(request: NextRequest) {
 
     try {
       console.log("Starting Cloudinary upload...");
-      const buffer = Buffer.from(await file.arrayBuffer());
 
-      // Use the utility function to upload to Cloudinary
+      // Convert file to buffer
+      console.log("Converting file to buffer...");
+      const arrayBuffer = await file.arrayBuffer();
+      console.log(`Array buffer size: ${arrayBuffer.byteLength} bytes`);
+      const buffer = Buffer.from(arrayBuffer);
+      console.log(`Buffer size: ${buffer.length} bytes`);
+
+      // Determine resource type based on file type
+      let resourceType: "auto" | "image" | "video" | "raw" = "auto";
+      if (file.type.startsWith("image/")) {
+        resourceType = "image";
+      } else if (file.type.startsWith("video/")) {
+        resourceType = "video";
+      } else if (file.type.startsWith("audio/")) {
+        resourceType = "video"; // Audio files are handled as video in Cloudinary
+      }
+
+      console.log(`Using resource type: ${resourceType}`);
+
+      // Use the utility function to upload to Cloudinary with more retries
       uploadResponse = await uploadToCloudinary(buffer, {
         folder: "temp_transcriptions",
         publicId: `temp_${Date.now()}`,
-        resourceType: "auto"
+        resourceType: resourceType,
+        maxRetries: 5 // Increase retries for reliability
       });
 
-      console.log("Upload response received");
+      console.log("Upload response received:", JSON.stringify(uploadResponse));
+
+      if (!uploadResponse || !uploadResponse.secure_url) {
+        throw new Error("Invalid response from Cloudinary: missing secure_url");
+      }
+
       cloudinaryUrl = uploadResponse.secure_url;
       console.log("Cloudinary URL:", cloudinaryUrl);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error during Cloudinary upload:", error);
+      // Provide more detailed error message
       return NextResponse.json(
-        { error: "Failed to upload file to Cloudinary" },
+        {
+          error: "Failed to upload file to Cloudinary",
+          details: error.message || "Unknown error",
+          statusCode: error.http_code || 500
+        },
         { status: 500 }
       );
     }
@@ -125,10 +168,16 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("API error:", error);
+
+    // Provide more detailed error information
     return NextResponse.json(
-      { error: "Failed to process request" },
+      {
+        error: "Failed to process request",
+        details: error.message || "Unknown error",
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     );
   }

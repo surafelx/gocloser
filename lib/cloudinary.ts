@@ -29,44 +29,111 @@ export function initCloudinary() {
   return cloudinary;
 }
 
-// Upload a file to Cloudinary
+// Upload a file to Cloudinary with retry logic
 export async function uploadToCloudinary(
   buffer: Buffer,
   options: {
     folder?: string;
     resourceType?: "auto" | "image" | "video" | "raw";
     publicId?: string;
+    maxRetries?: number;
   } = {}
 ) {
   const cloudinary = initCloudinary();
+
+  // Log Cloudinary configuration for debugging
+  console.log("Cloudinary Configuration:", {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ? "Set" : "Missing",
+    apiKey: process.env.CLOUDINARY_API_KEY ? "Set" : "Missing",
+    apiSecret: process.env.CLOUDINARY_API_SECRET ? "Set" : "Missing",
+  });
 
   const uploadOptions = {
     resource_type: options.resourceType || "auto",
     folder: options.folder || "uploads",
     public_id: options.publicId || `file_${Date.now()}`,
+    timeout: 120000, // 120 second timeout
   };
 
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      uploadOptions,
-      (error, result) => {
-        if (error) {
-          console.error("Cloudinary upload error:", error);
-          reject(error);
-        } else {
-          resolve(result);
-        }
+  console.log("Upload options:", JSON.stringify(uploadOptions));
+
+  const maxRetries = options.maxRetries || 3;
+  let attempt = 0;
+  let lastError: any = null;
+
+  while (attempt < maxRetries) {
+    attempt++;
+    console.log(`Cloudinary upload attempt ${attempt}/${maxRetries}`);
+
+    try {
+      // Use Cloudinary's upload API with a buffer
+      return await new Promise((resolve, reject) => {
+        // Create a temporary file name for the buffer
+        const fileName = `temp_${Date.now()}.${getFileExtension(options.resourceType)}`;
+
+        // Use Cloudinary's upload API directly with buffer
+        cloudinary.uploader.upload_stream(
+          uploadOptions,
+          (error, result) => {
+            if (error) {
+              console.error(`Cloudinary upload error (attempt ${attempt}/${maxRetries}):`, error);
+              reject(error);
+            } else {
+              console.log(`Cloudinary upload successful on attempt ${attempt}`);
+              resolve(result);
+            }
+          }
+        ).end(buffer);
+      });
+    } catch (error: any) {
+      lastError = error;
+      console.error(`Upload attempt ${attempt} failed:`, error.message);
+
+      // If we've reached max retries, throw the error
+      if (attempt >= maxRetries) {
+        console.error(`All ${maxRetries} upload attempts failed`);
+        throw new Error(`Failed to upload to Cloudinary after ${maxRetries} attempts: ${error.message}`);
       }
-    );
 
-    // Handle upload stream errors
-    uploadStream.on('error', (error) => {
-      console.error("Upload stream error:", error);
-      reject(error);
-    });
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+      console.log(`Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
 
-    uploadStream.end(buffer);
-  });
+  // This should never be reached due to the throw in the catch block above
+  throw lastError || new Error('Failed to upload to Cloudinary');
+}
+
+// Helper function to determine MIME type based on resource type
+function getMimeType(resourceType?: string): string {
+  switch (resourceType) {
+    case 'image':
+      return 'image/jpeg';
+    case 'video':
+      return 'video/mp4';
+    case 'raw':
+      return 'application/octet-stream';
+    case 'auto':
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+// Helper function to get file extension based on resource type
+function getFileExtension(resourceType?: string): string {
+  switch (resourceType) {
+    case 'image':
+      return 'jpg';
+    case 'video':
+      return 'mp4';
+    case 'raw':
+      return 'bin';
+    case 'auto':
+    default:
+      return 'bin';
+  }
 }
 
 // Delete a file from Cloudinary
