@@ -144,10 +144,17 @@ export async function getSignedUrl(key: string, expiresIn = 3600) {
 }
 
 // Extract audio from video using S3 and return the URL
-// This is a placeholder - in a real implementation, you would use a service like
-// AWS MediaConvert or AWS Elemental to extract audio from video
+// Since we can't directly extract audio in S3, we'll just return the video URL
+// and let the Google Speech API handle it (it can process video files directly)
 export async function extractAudioFromS3Video(videoKey: string) {
-  // For now, we'll just return the video URL since we can't process it in S3 directly
-  // In a real implementation, you would use AWS MediaConvert or similar
-  return getSignedUrl(videoKey);
+  console.log(`Using S3 video directly for transcription: ${videoKey}`);
+
+  // Get a signed URL for the video file
+  const videoUrl = await getSignedUrl(videoKey);
+
+  // Log the URL for debugging
+  console.log(`S3 video URL for transcription: ${videoUrl}`);
+
+  // Return the video URL - Google Speech API will handle it
+  return videoUrl;
 }

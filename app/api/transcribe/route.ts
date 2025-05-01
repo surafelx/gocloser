@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractAudioFromVideo, transcribe } from "@/lib/google-speech";
-import {
-  uploadToCloudinary,
-  uploadToCloudinaryAlternative,
-  deleteFromCloudinary
-} from "@/lib/cloudinary";
+import { transcribeWithGoogleSpeech } from "@/lib/google-speech";
 import {
   uploadToS3,
-  deleteFromS3,
-  extractAudioFromS3Video
+  deleteFromS3
 } from "@/lib/s3";
 import { getCurrentUser } from "@/lib/auth";
 import dbConnect from "@/lib/mongoose";
@@ -97,13 +91,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload file to cloud storage (Cloudinary with S3 fallback)
+    // Upload file directly to S3 (bypassing Cloudinary)
     let fileUrl;
     let uploadResponse: any = null;
-    let storageProvider = "cloudinary"; // Track which provider was used
 
     try {
-      console.log("Starting file upload...");
+      console.log("Starting file upload to S3...");
 
       // Convert file to buffer
       console.log("Converting file to buffer...");
@@ -114,63 +107,28 @@ export async function POST(request: NextRequest) {
 
       console.log(`File MIME type: ${file.type}`);
 
-      // Try Cloudinary first (with both methods)
-      try {
-        console.log("Trying Cloudinary primary upload method...");
-        uploadResponse = await uploadToCloudinary(buffer, {
-          folder: "temp_transcriptions",
-          publicId: `temp_${Date.now()}`,
-          fileType: file.type,
-          maxRetries: 3
-        });
-      } catch (primaryError) {
-        // If primary method fails, try the alternative Cloudinary method
-        console.log("Cloudinary primary upload method failed, trying alternative...");
-        console.error("Cloudinary primary upload error:", primaryError);
-
-        try {
-          // Add a small delay before trying alternative method
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          uploadResponse = await uploadToCloudinaryAlternative(buffer, {
-            folder: "temp_transcriptions",
-            publicId: `temp_${Date.now()}_alt`,
-            fileType: file.type
-          });
-        } catch (alternativeError) {
-          // If both Cloudinary methods fail, try S3 as a last resort
-          console.log("Cloudinary alternative upload method failed, falling back to S3...");
-          console.error("Cloudinary alternative upload error:", alternativeError);
-
-          // Check if AWS credentials are configured
-          if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_S3_BUCKET) {
-            console.error("AWS S3 credentials not configured, cannot use fallback");
-            throw new Error("All upload methods failed and S3 fallback is not configured");
-          }
-
-          // Add a small delay before trying S3
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Try uploading to S3
-          uploadResponse = await uploadToS3(buffer, {
-            folder: "temp_transcriptions",
-            publicId: `temp_${Date.now()}_s3`,
-            fileType: file.type
-          });
-
-          storageProvider = "s3"; // Mark that we're using S3
-          console.log("Successfully uploaded to S3 fallback");
-        }
+      // Check if AWS credentials are configured
+      if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_S3_BUCKET) {
+        console.error("AWS S3 credentials not configured");
+        throw new Error("AWS S3 is not properly configured");
       }
 
+      // Upload directly to S3
+      uploadResponse = await uploadToS3(buffer, {
+        folder: "temp_transcriptions",
+        publicId: `temp_${Date.now()}_s3`,
+        fileType: file.type
+      });
+
+      console.log("Successfully uploaded to S3");
       console.log("Upload response received:", JSON.stringify(uploadResponse));
 
       if (!uploadResponse || !uploadResponse.secure_url) {
-        throw new Error("Invalid response from upload: missing secure_url");
+        throw new Error("Invalid response from S3 upload: missing secure_url");
       }
 
       fileUrl = uploadResponse.secure_url;
-      console.log(`${storageProvider.toUpperCase()} URL:`, fileUrl);
+      console.log(`S3 URL:`, fileUrl);
     } catch (error: any) {
       console.error(`Error during file upload:`, error);
       // Provide more detailed error message
@@ -184,35 +142,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process video files if needed
-    let audioUrl = fileUrl;
-    if (fileType === "video") {
-      try {
-        // Use the appropriate extraction method based on storage provider
-        if (storageProvider === "cloudinary") {
-          audioUrl = await extractAudioFromVideo(fileUrl);
-        } else if (storageProvider === "s3") {
-          audioUrl = await extractAudioFromS3Video(uploadResponse.public_id);
-        }
-      } catch (error) {
-        console.error("Error extracting audio:", error);
-        return NextResponse.json(
-          { error: "Failed to extract audio from video" },
-          { status: 500 }
-        );
-      }
-    }
+    // We'll use the S3 URL directly for both audio and video
+    // Google Speech-to-Text can handle both
+    const audioUrl = fileUrl;
 
-    // Transcribe the audio
+    // Transcribe the audio directly with Google Speech-to-Text
     try {
-      console.log(`Starting transcription of: ${audioUrl}`);
-      const transcript = await transcribe(audioUrl);
+      console.log(`Starting Google Speech-to-Text transcription of: ${audioUrl}`);
+
+      // Directly call Google Speech-to-Text with the S3 URL
+      const transcript = await transcribeWithGoogleSpeech(audioUrl);
 
       if (!transcript) {
         throw new Error("Empty transcript received");
       }
 
-      console.log(`Transcription successful, length: ${transcript.length} characters`);
+      console.log(`Google Speech-to-Text transcription successful, length: ${transcript.length} characters`);
 
       // Track token usage for audio recording (100 tokens per recording)
       try {
@@ -234,25 +179,20 @@ export async function POST(request: NextRequest) {
       const fileInfo = `\n\nFile: ${file.name} (${fileType})\nTranscribed at: ${new Date().toISOString()}`;
       const finalTranscript = transcript + fileInfo;
 
-      // Cleanup: Delete the temporary file from storage
+      // Cleanup: Delete the temporary file from S3
       if (uploadResponse && uploadResponse.public_id) {
         try {
-          if (storageProvider === "cloudinary") {
-            await deleteFromCloudinary(uploadResponse.public_id);
-            console.log("Cloudinary file deleted:", uploadResponse.public_id);
-          } else if (storageProvider === "s3") {
-            await deleteFromS3(uploadResponse.public_id);
-            console.log("S3 file deleted:", uploadResponse.public_id);
-          }
+          await deleteFromS3(uploadResponse.public_id);
+          console.log("S3 file deleted:", uploadResponse.public_id);
         } catch (cleanupError) {
-          console.error(`Error deleting ${storageProvider} file:`, cleanupError);
+          console.error(`Error deleting S3 file:`, cleanupError);
           // Continue with the response even if cleanup fails
         }
       }
 
       return NextResponse.json({
         transcript: finalTranscript,
-        transcriptionMethod: "whisper",
+        transcriptionMethod: "google-speech",
       });
     } catch (error: any) {
       console.error("Transcription error:", error);
