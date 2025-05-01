@@ -9,6 +9,8 @@ import { getCurrentUser } from "@/lib/auth";
 import dbConnect from "@/lib/mongoose";
 import Subscription from "@/models/Subscription";
 import { getPlanById } from "@/lib/whop";
+import { updateTokenUsage } from "@/lib/token-manager";
+import { TOKEN_COSTS } from "@/lib/token-costs";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -17,6 +19,34 @@ export async function POST(request: NextRequest) {
   console.log("Transcribe API route called");
 
   try {
+    // Check if user is authenticated
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Check if user has permission to use voice transcription
+    await dbConnect();
+    const subscription = await Subscription.findOne({
+      userId: currentUser.id || currentUser.userId,
+      status: "active",
+    });
+
+    // Get the user's plan
+    const planId = subscription?.planId || "free";
+    const plan = getPlanById(planId);
+
+    // Check if the plan supports voice transcription
+    if (!plan.hasVoiceSupport) {
+      return NextResponse.json(
+        {
+          error: "Voice transcription not available on your plan",
+          details: "Please upgrade to the Pro plan to use voice transcription features."
+        },
+        { status: 403 }
+      );
+    }
+
     // Log environment variables (without revealing secrets)
     console.log("Environment check:", {
       CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? "Set" : "Missing",
@@ -140,6 +170,20 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`Transcription successful, length: ${transcript.length} characters`);
+
+      // Track token usage for audio recording (100 tokens per recording)
+      try {
+        const userId = currentUser.id || currentUser.userId;
+        await updateTokenUsage(
+          userId,
+          TOKEN_COSTS.AUDIO_RECORDING, // Prompt tokens (100 for audio recording)
+          0 // Completion tokens
+        );
+        console.log(`[TOKEN-TRACKING] User ${userId} used ${TOKEN_COSTS.AUDIO_RECORDING} tokens for AUDIO_RECORDING`);
+      } catch (tokenError) {
+        console.error("Error tracking token usage for audio recording:", tokenError);
+        // Continue with the response even if token tracking fails
+      }
 
       // Add metadata
       const fileInfo = `\n\nFile: ${file.name} (${fileType})\nTranscribed at: ${new Date().toISOString()}`;

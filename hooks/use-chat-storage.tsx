@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { trackInteractionTokens } from '@/lib/token-costs';
 
 // Global objects to track pending requests
 const pendingRequests = {
@@ -553,6 +554,33 @@ export function useChatStorage({ chatId, initialMessages = [] }: UseChatStorageP
       // Add message to local state first for immediate UI update
       const updatedMessages = [...messages, message];
       setMessages(updatedMessages);
+
+      // Track token usage for chat message (1 token per message)
+      if (message.role === 'user') {
+        await trackInteractionTokens(
+          'current_user', // This will be replaced with the actual user ID in the API
+          'CHAT_MESSAGE',
+          {
+            messageId: message.id,
+            chatId: chat?.id || 'new_chat',
+            hasAttachment: !!message.attachmentType
+          }
+        );
+
+        // If the message has an attachment, track additional tokens for the upload
+        if (message.attachmentType) {
+          await trackInteractionTokens(
+            'current_user',
+            'FILE_UPLOAD',
+            {
+              messageId: message.id,
+              chatId: chat?.id || 'new_chat',
+              attachmentType: message.attachmentType,
+              attachmentName: message.attachmentName
+            }
+          );
+        }
+      }
 
       if (chat) {
         // If chat exists, save message to it

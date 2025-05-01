@@ -3,6 +3,8 @@ import dbConnect from '@/lib/mongoose';
 import { getCurrentUser } from '@/lib/auth';
 import { saveFile, generateFileSummary } from '@/lib/file-utils';
 import File from '@/models/File';
+import { updateTokenUsage } from '@/lib/token-manager';
+import { TOKEN_COSTS } from '@/lib/token-costs';
 
 // Get all files for the current user
 export async function GET(request: NextRequest) {
@@ -71,6 +73,20 @@ export async function POST(request: NextRequest) {
 
     // Save the file
     const fileRecord = await saveFile(buffer, originalName, fileType, currentUser.userId);
+
+    // Track token usage for file upload (10 tokens per upload)
+    try {
+      const userId = currentUser.id || currentUser.userId;
+      await updateTokenUsage(
+        userId,
+        TOKEN_COSTS.FILE_UPLOAD, // Prompt tokens (10 for file upload)
+        0 // Completion tokens
+      );
+      console.log(`[TOKEN-TRACKING] User ${userId} used ${TOKEN_COSTS.FILE_UPLOAD} tokens for FILE_UPLOAD`);
+    } catch (tokenError) {
+      console.error("Error tracking token usage for file upload:", tokenError);
+      // Continue with the response even if token tracking fails
+    }
 
     // Generate a summary for text-based files
     if (fileType.includes('text') || fileType.includes('pdf') || fileType.includes('document')) {
