@@ -5,6 +5,10 @@ import {
   uploadToCloudinaryAlternative,
   deleteFromCloudinary
 } from "@/lib/cloudinary";
+import { getCurrentUser } from "@/lib/auth";
+import dbConnect from "@/lib/mongoose";
+import Subscription from "@/models/Subscription";
+import { getPlanById } from "@/lib/whop";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;

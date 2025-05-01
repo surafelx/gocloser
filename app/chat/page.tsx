@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import AppLayout from "@/components/app-layout"
 import { AnimatedButton } from "@/components/ui/animated-button"
 import AnimatedElement from "@/components/animated-element"
@@ -72,6 +72,16 @@ interface Message {
 // ErrorState interface removed - not used
 
 export default function ChatPage() {
+  console.log('[CHAT-PAGE] ChatPage component rendering');
+
+  // Log when the component mounts
+  useEffect(() => {
+    console.log('[CHAT-PAGE] ChatPage component mounted');
+    return () => {
+      console.log('[CHAT-PAGE] ChatPage component unmounting');
+    };
+  }, []);
+
   // Initialize toast
   const { toast } = useToast()
 
@@ -112,28 +122,35 @@ export default function ChatPage() {
     initialMessages,
   })
 
-  const [messages, setMessages] = useState<Message[]>(storedMessages.length > 0 ? storedMessages : initialMessages)
+  // Use storedMessages directly from the chat context instead of maintaining a separate state
+  // This prevents unnecessary re-renders and potential infinite loops
+  const messages = useMemo(() => {
+    console.log('[DEBUG-MESSAGES] Computing messages from storedMessages:',
+      storedMessages.length > 0 ?
+        `Using ${storedMessages.length} stored messages` :
+        `Using ${initialMessages.length} initial messages`);
 
-  // Keep messages in sync with stored messages
-  useEffect(() => {
-    console.log('Stored messages updated:', storedMessages.length, 'Current messages:', messages.length)
-
-    // Find any user messages that might be in the current state but not in stored messages
-    // This can happen when a user sends a message but it hasn't been saved to the server yet
-    const pendingUserMessages = messages.filter(msg =>
-      msg.role === 'user' && !storedMessages.some(sm => sm.id === msg.id)
-    );
-
-    console.log('Pending user messages:', pendingUserMessages.length);
-
-    // Only update if we have stored messages, otherwise keep the initial welcome message
     if (storedMessages.length > 0) {
-      // Combine stored messages with any pending user messages
-      const combinedMessages = [...storedMessages, ...pendingUserMessages];
-      console.log('Setting combined messages:', combinedMessages.length);
-      setMessages(combinedMessages);
+      // Log the roles of messages to debug user message display issues
+      console.log('[DEBUG-MESSAGES] Message roles:',
+        storedMessages.map(m => `${m.id.substring(0, 8)}:${m.role}`).join(', '));
     }
-  }, [storedMessages])
+
+    return storedMessages.length > 0 ? storedMessages : initialMessages;
+  }, [storedMessages, initialMessages]);
+
+  // Log when messages change for debugging
+  useEffect(() => {
+    console.log('[DEBUG-MESSAGES] Messages updated, count:', messages.length);
+    if (messages.length > 0) {
+      console.log('[DEBUG-MESSAGES] First few messages:',
+        messages.slice(0, 3).map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content.substring(0, 30) + '...'
+        })));
+    }
+  }, [messages]);
 
   const [input, setInput] = useState("")
   const [recordingComplete, setRecordingComplete] = useState(false)
@@ -147,7 +164,7 @@ export default function ChatPage() {
     startRecording,
     stopRecording,
     cancelRecording: cancelAudioRecording,
-    recordingBlob,
+    // recordingBlob is handled in onRecordingComplete
     error: recordingError
   } = useAudioRecorder({
     onRecordingComplete: (blob, duration) => {
@@ -216,23 +233,130 @@ export default function ChatPage() {
   }, [chatLoading])
 
   // Create a new chat if we're on the main chat page and no chat is loaded
+  // Using a ref to track if we've already tried to initialize a chat
+  const chatInitializedRef = useRef<boolean>(false);
+  const initializationAttemptedRef = useRef<boolean>(false);
+
+  // Add a ref to track component mount status
+  const isMountedRef = useRef<boolean>(false);
+
+  // Use localStorage to track if we've already created an initial chat in this session
   useEffect(() => {
+    console.log('[DEBUG-API-CALLS] Chat initialization effect triggered');
+
+    // Skip if we've already attempted initialization in this component instance
+    if (initializationAttemptedRef.current) {
+      console.log('[DEBUG-API-CALLS] Initialization already attempted, skipping');
+      return;
+    }
+
+    // Check if this is the first mount
+    if (isMountedRef.current) {
+      console.log('[DEBUG-API-CALLS] Not first mount, skipping initialization');
+      return;
+    }
+
+    // Mark that component is mounted and initialization attempted
+    isMountedRef.current = true;
+    initializationAttemptedRef.current = true;
+    console.log('[DEBUG-API-CALLS] Starting chat initialization');
+
     const initializeChat = async () => {
+      // Check if we've already initialized a chat in this session
+      const initialChatCreated = localStorage.getItem('initial_chat_created');
+
+      // If we've already tried to initialize a chat, don't try again
+      if (chatInitializedRef.current || initialChatCreated === 'true') {
+        console.log('[API] Chat already initialized, skipping');
+        return;
+      }
+
+      console.log('[API] ChatPage - Checking if we need to initialize a chat:',
+                  'currentChatId:', currentChatId,
+                  'chat:', chat ? 'exists' : 'null',
+                  'storedMessages.length:', storedMessages.length);
+
       // If we're on the main chat page (not a specific chat) and there are no messages
       // other than the initial welcome message, and no chat is loaded, create a new chat
-      if (!currentChatId && !chat && storedMessages.length <= 1 && storedMessages[0]?.id === 'welcome') {
+      if (!currentChatId && !chat && storedMessages.length <= 1) {
         try {
-          console.log('Creating new chat...');
+          console.log('[API] ChatPage - Creating new chat...');
+          chatInitializedRef.current = true;
+
+          // Mark that we've created an initial chat in this session
+          localStorage.setItem('initial_chat_created', 'true');
+
           // Create a new chat with the welcome message
-          await createChat('New Chat', storedMessages);
+          await createChat('New Chat', initialMessages);
+          console.log('[API] ChatPage - New chat created successfully');
         } catch (error) {
-          console.error('Error creating initial chat:', error);
+          console.error('[API] ChatPage - Error creating initial chat:', error);
+          // Reset the flag so we can try again on next page load
+          localStorage.removeItem('initial_chat_created');
         }
+      } else {
+        // Mark as initialized if we don't need to create a chat
+        chatInitializedRef.current = true;
+        localStorage.setItem('initial_chat_created', 'true');
+        console.log('[API] ChatPage - No need to create a new chat');
       }
     };
 
-    initializeChat();
-  }, [storedMessages, createChat, chat, currentChatId])
+    // Use setTimeout to break potential circular dependencies
+    console.log('[DEBUG-API-CALLS] Setting up initialization timeout');
+    const timeoutId = setTimeout(() => {
+      console.log('[DEBUG-API-CALLS] Timeout fired, calling initializeChat()');
+      initializeChat();
+    }, 1000);
+
+    // Clean up the timeout if the component unmounts
+    return () => {
+      console.log('[DEBUG-API-CALLS] Cleaning up initialization timeout');
+      clearTimeout(timeoutId);
+    };
+  }, []);  // Empty dependency array - only run once on mount
+
+  // Track all dependency changes in a single effect to see the sequence
+  const depsRef = useRef({
+    currentChatId: null as string | null,
+    chatId: null as string | null,
+    messagesLength: 0,
+    renderCount: 0
+  });
+
+  // Increment render count on each render
+  depsRef.current.renderCount++;
+
+  useEffect(() => {
+    // Only log if something actually changed
+    const hasChanges =
+      depsRef.current.currentChatId !== currentChatId ||
+      (chat?.id !== depsRef.current.chatId) ||
+      depsRef.current.messagesLength !== storedMessages.length;
+
+    if (hasChanges) {
+      console.log('[DEBUG-API-CALLS] Dependencies changed:', {
+        renderCount: depsRef.current.renderCount,
+        currentChatId: {
+          from: depsRef.current.currentChatId,
+          to: currentChatId
+        },
+        chat: {
+          from: depsRef.current.chatId,
+          to: chat?.id || null
+        },
+        messagesLength: {
+          from: depsRef.current.messagesLength,
+          to: storedMessages.length
+        }
+      });
+
+      // Update the ref with current values
+      depsRef.current.currentChatId = currentChatId;
+      depsRef.current.chatId = chat?.id || null;
+      depsRef.current.messagesLength = storedMessages.length;
+    }
+  });
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   // Token usage tracking
@@ -319,7 +443,7 @@ export default function ChatPage() {
     console.log('Searching for:', query, 'in', messages.length, 'messages');
 
     // Enhanced search implementation
-    const results = messages.filter(message => {
+    const results = messages.filter((message: Message) => {
       // Skip system messages or empty content
       if (!message.content || message.role === 'system') {
         return false;
@@ -369,25 +493,24 @@ export default function ChatPage() {
     clearError()
     startProcessing()
 
+    // Create a unique ID with a timestamp prefix for proper sorting
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     let userMessage: Message = {
-      id: Date.now().toString(),
+      id: messageId,
       role: "user", // Ensure this is set to "user"
       content: messageContent,
     }
 
-    // Add user message to local state immediately for better UX
-    console.log('Adding user message to local state:', userMessage);
+    // Log the user message for debugging
+    console.log('[DEBUG-MESSAGES] Creating user message:', {
+      id: userMessage.id,
+      role: userMessage.role,
+      content: userMessage.content.substring(0, 50) + '...'
+    });
 
-    // Force update the messages state with the new user message
-    // Create a new array to ensure React detects the change
-    const updatedMessages = [...messages, userMessage];
-    console.log('Setting messages state directly:', updatedMessages);
-
-    // Set the messages state with the updated messages
-    setMessages(updatedMessages);
-
-    // Log the current messages after update
-    console.log('Messages after update:', updatedMessages.length);
+    // Log the message being sent
+    console.log('Sending user message:', userMessage.id);
 
     if (selectedFile) {
       // Validate file
@@ -408,10 +531,8 @@ export default function ChatPage() {
         content: input || `I've uploaded a ${fileType} file for analysis: ${selectedFile.name}`,
       }
 
-      // Update the message in the UI with attachment info
-      setMessages(prev => prev.map(msg =>
-        msg.id === userMessage.id ? userMessage : msg
-      ))
+      // We no longer need to update the UI directly since we're using the chat context
+      // The UI will update automatically when we save the message to storage
 
       try {
         let fileContent = ""
@@ -449,12 +570,11 @@ export default function ChatPage() {
             updateProgress(20)
 
             // Set up a progress simulation for better UX
+            let currentProgress = 20;
             const progressInterval = setInterval(() => {
-              updateProgress(prev => {
-                // Simulate progress up to 90% (leave room for final steps)
-                const newProgress = Math.min(prev + (Math.random() * 3), 90);
-                return newProgress;
-              });
+              // Simulate progress up to 90% (leave room for final steps)
+              currentProgress = Math.min(currentProgress + (Math.random() * 3), 90);
+              updateProgress(currentProgress);
             }, 1000);
 
             let responseData;
@@ -542,13 +662,9 @@ export default function ChatPage() {
         setRecordingComplete(false)
         setIsLoading(true)
 
-        // Add a temporary loading message
-        const loadingMessage: Message = {
-          id: 'loading-' + Date.now(),
-          role: 'assistant',
-          content: 'Analyzing your file...',
-        }
-        setMessages(prev => [...prev, loadingMessage])
+        // We'll use a local loading state instead of modifying the messages
+        // This avoids issues with the chat context
+        setIsLoading(true)
 
         try {
           const analysisMessage = await analyzeContentWithGemini(
@@ -558,8 +674,7 @@ export default function ChatPage() {
             input
           )
 
-          // Remove the loading message and save the analysis message to storage
-          setMessages(prev => prev.filter(msg => !msg.id.startsWith('loading-')))
+          // Save the analysis message to storage
           await saveMessage(analysisMessage)
 
           setCurrentAnalysis(analysisMessage)
@@ -576,8 +691,7 @@ export default function ChatPage() {
             })
           }
         } catch (error) {
-          // Remove the loading message
-          setMessages(prev => prev.filter(msg => !msg.id.startsWith('loading-')))
+          // Handle the error
           handleFileError(error, () => {
             setSelectedFile(null)
             resetProcessing()
@@ -593,32 +707,38 @@ export default function ChatPage() {
         })
       }
     } else {
-      // User message is already added to the UI at the beginning of the function
-      // Save the user message to storage
-      console.log('Saving user message to storage:', userMessage)
+      // Save the user message to storage first
+      console.log('Saving user message to storage:', userMessage.id)
       try {
+        // This will add the message to the database and update storedMessages
         await saveMessage(userMessage)
         console.log('User message saved successfully')
       } catch (error) {
         console.error('Error saving user message:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to save your message. Please try again.',
+          variant: 'destructive',
+        })
+        finishProcessing()
+        return
       }
+
       setInput("")
       setIsLoading(true)
 
-      // Add a temporary loading message with a clear loading ID
-      const loadingMessage: Message = {
-        id: 'loading-' + Date.now().toString(),
-        role: 'assistant',
-        content: 'Thinking...',
-      }
-      console.log('Adding loading message:', loadingMessage.id);
-      setMessages(prev => [...prev, loadingMessage])
+      // Set loading state to show a loading indicator
+      console.log('Setting loading state to true');
+      setIsLoading(true);
 
       try {
-        const result = await sendGeminiMessage(input)
-        // Remove the loading message and save the AI response to storage
-        setMessages(prev => prev.filter(msg => !msg.id.startsWith('loading-')))
+        // Send the message to Gemini and get the response
+        const result = await sendGeminiMessage(messageContent)
+
+        // Save the AI response to storage
+        // This will update storedMessages and trigger the useEffect
         await saveMessage(result)
+        console.log('AI response saved successfully:', result.id)
 
         // Track token usage if available
         if (result.tokenUsage) {
@@ -631,8 +751,15 @@ export default function ChatPage() {
           })
         }
       } catch (error) {
-        // Remove the loading message
-        setMessages(prev => prev.filter(msg => !msg.id.startsWith('loading-')))
+        console.error('Error getting AI response:', error)
+
+        // Show error message to user
+        toast({
+          title: 'Error',
+          description: 'Failed to get a response. Please try again.',
+          variant: 'destructive',
+        })
+
         handleMessageError(() => {
           setIsLoading(false)
         })
@@ -1041,22 +1168,32 @@ I recommend practicing these techniques in our chat interface. Would you like to
             ) : (
               <>
                 {messages.length > 0 ? (
-                  messages
-                    .sort((a, b) => {
+                  [...messages]
+                    .sort((a: Message, b: Message) => {
                       // If messages have the same ID, maintain original order
                       if (a.id === b.id) return 0;
-                      
-                      // Convert IDs to numbers for comparison, fallback to 0 if conversion fails
-                      const aTime = Number(a.id) || 0;
-                      const bTime = Number(b.id) || 0;
-                      
+
+                      // Extract timestamp from ID for consistent sorting
+                      // For new format (msg_timestamp_random), extract the timestamp
+                      // For old format (numeric ID), use the ID itself
+                      const getTimestamp = (id: string) => {
+                        if (id.startsWith('msg_')) {
+                          const parts = id.split('_');
+                          return parts.length > 1 ? Number(parts[1]) : 0;
+                        }
+                        return Number(id) || 0;
+                      };
+
+                      const aTime = getTimestamp(a.id);
+                      const bTime = getTimestamp(b.id);
+
                       return aTime - bTime;
                     })
                     .map((message) => (
                       <ChatMessage
                         key={message.id}
                         message={message}
-                        isLoading={isLoading}
+                        isLoading={isLoading && message.id.startsWith('loading')}
                         onShowPerformance={(msg) => setCurrentAnalysis(msg)}
                       />
                     ))

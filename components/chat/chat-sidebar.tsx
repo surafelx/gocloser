@@ -38,7 +38,12 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/contexts/chat-context";
 import AnimatedElement from "@/components/animated-element";
@@ -69,35 +74,42 @@ export function ChatSidebar() {
   const [editTitle, setEditTitle] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
-  const [generatingTitleForChats, setGeneratingTitleForChats] = useState<string[]>([]);
+  const [generatingTitleForChats, setGeneratingTitleForChats] = useState<
+    string[]
+  >([]);
 
   // Auto-generate title for a chat if needed
-  const autoGenerateTitleIfNeeded = useCallback(async (chatId: string, chatMessages: any[]) => {
-    try {
-      // Only generate title if it's still "New Chat"
-      const chat = chats.find(c => c.id === chatId);
-      if (!chat || chat.title !== "New Chat") {
+  const autoGenerateTitleIfNeeded = useCallback(
+    async (chatId: string, chatMessages: any[]) => {
+      try {
+        // Only generate title if it's still "New Chat"
+        const chat = chats.find((c) => c.id === chatId);
+        if (!chat || chat.title !== "New Chat") {
+          return null;
+        }
+
+        // Check if the chat has at least 2 user messages
+        const userMessages = chatMessages.filter(
+          (msg: any) => msg.role === "user"
+        );
+        if (userMessages.length >= 2) {
+          // Generate a title using the Gemini API
+          const newTitle = await generateTitle(chatMessages);
+
+          if (newTitle && newTitle !== "New Chat") {
+            // Update the chat with the new title
+            await updateChat(newTitle);
+            return newTitle;
+          }
+        }
+        return null;
+      } catch (error) {
+        console.error("Error auto-generating title:", error);
         return null;
       }
-
-      // Check if the chat has at least 2 user messages
-      const userMessages = chatMessages.filter((msg: any) => msg.role === "user");
-      if (userMessages.length >= 2) {
-        // Generate a title using the Gemini API
-        const newTitle = await generateTitle(chatMessages);
-
-        if (newTitle && newTitle !== 'New Chat') {
-          // Update the chat with the new title
-          await updateChat(newTitle);
-          return newTitle;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error("Error auto-generating title:", error);
-      return null;
-    }
-  }, [generateTitle, updateChat, chats]);
+    },
+    [generateTitle, updateChat, chats]
+  );
 
   // Fetch chat history
   const fetchChats = useCallback(async () => {
@@ -146,25 +158,31 @@ export function ChatSidebar() {
         });
 
       // Auto-generate titles for chats with default titles
-      const chatsNeedingTitles = formattedChats.filter(chat =>
-        chat.title === "New Chat" &&
-        chat.messages &&
-        chat.messages.filter((msg: any) => msg.role === "user").length >= 2
+      const chatsNeedingTitles = formattedChats.filter(
+        (chat) =>
+          chat.title === "New Chat" &&
+          chat.messages &&
+          chat.messages.filter((msg: any) => msg.role === "user").length >= 2
       );
 
       if (chatsNeedingTitles.length > 0) {
-        console.log(`Auto-generating titles for ${chatsNeedingTitles.length} chats`);
+        console.log(
+          `Auto-generating titles for ${chatsNeedingTitles.length} chats`
+        );
 
         // Add all chats to the generating titles list
-        setGeneratingTitleForChats(prev => [
+        setGeneratingTitleForChats((prev) => [
           ...prev,
-          ...chatsNeedingTitles.map(chat => chat.id)
+          ...chatsNeedingTitles.map((chat) => chat.id),
         ]);
 
         // Process one chat at a time to avoid rate limiting
         for (const chat of chatsNeedingTitles) {
           if (chat.messages) {
-            const newTitle = await autoGenerateTitleIfNeeded(chat.id, chat.messages);
+            const newTitle = await autoGenerateTitleIfNeeded(
+              chat.id,
+              chat.messages
+            );
             if (newTitle) {
               // Update the title in our local state
               chat.title = newTitle;
@@ -193,7 +211,7 @@ export function ChatSidebar() {
   // Fetch chats on component mount
   useEffect(() => {
     fetchChats();
-  }, [fetchChats]);
+  }, []);
 
   // Update isOpen state when screen size changes
   useEffect(() => {
@@ -226,7 +244,7 @@ export function ChatSidebar() {
       // Navigate to the specific chat page with the new chat ID
       if (chatId) {
         // Set the current chat ID in the context
-        console.log('Setting current chat ID for new chat:', chatId);
+        console.log("Setting current chat ID for new chat:", chatId);
         setCurrentChatId(chatId);
 
         router.push(`/chat/${chatId}`);
@@ -258,35 +276,35 @@ export function ChatSidebar() {
   // Handle chat selection
   const handleSelectChat = async (chatId: string) => {
     try {
-      console.log('Selecting chat with ID:', chatId);
+      console.log("Selecting chat with ID:", chatId);
       setIsLoading(true);
       // Verify chat exists before navigation
       const response = await fetch(`/api/chats/${chatId}`);
       if (!response.ok) {
-        throw new Error('Chat not found');
+        throw new Error("Chat not found");
       }
 
       // Get the chat data for logging
       const data = await response.json();
 
       if (!data.chat || !data.chat.id) {
-        console.error('Invalid chat data format:', data);
-        throw new Error('Invalid chat data format');
+        console.error("Invalid chat data format:", data);
+        throw new Error("Invalid chat data format");
       }
 
       // Set the current chat ID in the context
-      console.log('Setting current chat ID in sidebar:', chatId);
+      console.log("Setting current chat ID in sidebar:", chatId);
       setCurrentChatId(chatId);
 
       // Navigate to the chat page
-      console.log('Navigating to chat page with ID:', chatId);
+      console.log("Navigating to chat page with ID:", chatId);
       router.push(`/chat/${chatId}`);
     } catch (error) {
-      console.error('Error selecting chat:', error);
+      console.error("Error selecting chat:", error);
       toast({
-        title: 'Failed to load chat',
-        description: 'Please try again later.',
-        variant: 'destructive',
+        title: "Failed to load chat",
+        description: "Please try again later.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -318,7 +336,7 @@ export function ChatSidebar() {
       // If we're currently viewing the deleted chat, redirect to new chat
       if (pathname === `/chat/${chatId}`) {
         // Clear the current chat ID in the context
-        console.log('Clearing current chat ID after deletion');
+        console.log("Clearing current chat ID after deletion");
         setCurrentChatId(null);
 
         router.push("/chat");
@@ -380,7 +398,7 @@ export function ChatSidebar() {
   const handleGenerateTitle = async (chatId: string) => {
     try {
       // Add this chat to the generating titles list
-      setGeneratingTitleForChats(prev => [...prev, chatId]);
+      setGeneratingTitleForChats((prev) => [...prev, chatId]);
 
       // First, get the chat messages
       const response = await fetch(`/api/chats/${chatId}`);
@@ -395,7 +413,7 @@ export function ChatSidebar() {
       // Generate a title using the Gemini API
       const newTitle = await generateTitle(chatMessages);
 
-      if (newTitle === 'New Chat') {
+      if (newTitle === "New Chat") {
         toast({
           title: "Could not generate title",
           description: "Not enough context to generate a meaningful title.",
@@ -412,7 +430,7 @@ export function ChatSidebar() {
 
       toast({
         title: "Title generated",
-        description: `Chat renamed to "${newTitle}"`
+        description: `Chat renamed to "${newTitle}"`,
       });
     } catch (error) {
       console.error("Error generating title:", error);
@@ -423,7 +441,7 @@ export function ChatSidebar() {
       });
     } finally {
       // Remove this chat from the generating titles list
-      setGeneratingTitleForChats(prev => prev.filter(id => id !== chatId));
+      setGeneratingTitleForChats((prev) => prev.filter((id) => id !== chatId));
       setIsLoading(false);
     }
   };
@@ -469,7 +487,7 @@ export function ChatSidebar() {
     <>
       {/* Minimized sidebar for mobile - only shows when sidebar is closed */}
       {!isOpen && isMobile && (
-        <div className="flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 w-14">
+        <div className="flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 w-20">
           <div className="flex flex-col h-full">
             {/* Toggle button */}
             <div className="flex justify-center p-3">
@@ -501,7 +519,7 @@ export function ChatSidebar() {
       {/* Full sidebar */}
       <div
         className={`flex flex-col h-full border-r border-border/40 bg-background/80 backdrop-blur transition-all duration-300 ${
-          isOpen ? "w-80" : "w-0"
+          isOpen ? "w-100" : "w-0"
         }`}
       >
         {isOpen && (
@@ -535,213 +553,225 @@ export function ChatSidebar() {
                 </Button>
               </div>
 
-            {/* Search */}
-            <div className="px-4 pb-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search chats..."
-                  className="pl-9 bg-accent/30"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+              {/* Search */}
+              <div className="px-4 pb-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search chats..."
+                    className="pl-9 bg-accent/30"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <Separator className="my-2" />
+
+              {/* Chat List */}
+              <ScrollArea className="flex-1 px-2">
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center h-40">
+                    <LoadingSpinner size="lg" text="Loading chats..." />
+                  </div>
+                ) : filteredChats.length > 0 ? (
+                  <div className="flex flex-col gap-1 px-2">
+                    {filteredChats.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className={`group flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-accent/50 ${
+                          pathname === `/chat/${chat.id}` ? "bg-accent" : ""
+                        }`}
+                        onClick={() => handleSelectChat(chat.id)}
+                      >
+                        <div className="flex-1 min-w-0 cursor-pointer">
+                          {editingChatId === chat.id ? (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleEditChat(chat.id, editTitle);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex gap-1"
+                            >
+                              <Input
+                                value={editTitle}
+                                onChange={(e) => setEditTitle(e.target.value)}
+                                className="h-8"
+                                autoFocus
+                              />
+                              <Button type="submit" size="sm" variant="ghost">
+                                Save
+                              </Button>
+                            </form>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4 text-primary flex-shrink-0" />
+                                <p className="font-medium truncate">
+                                  {chat.title}
+                                </p>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {chat.preview}
+                              </p>
+                            </>
+                          )}
+                        </div>
+
+                        {editingChatId !== chat.id && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Only allow generating title if it hasn't been generated before
+                                      if (chat.title === "New Chat") {
+                                        handleGenerateTitle(chat.id);
+                                      }
+                                    }}
+                                    disabled={chat.title !== "New Chat"}
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {chat.title === "New Chat"
+                                    ? "Generate AI title"
+                                    : "Title already generated"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingChatId(chat.id);
+                                setEditTitle(chat.title);
+                              }}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setChatToDelete(chat.id);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+
+                        <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                          {formatDate(chat.updatedAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-40 px-4 text-center">
+                    <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-muted-foreground">No chats found</p>
+                    {searchQuery && (
+                      <p className="text-sm text-muted-foreground">
+                        Try a different search term
+                      </p>
+                    )}
+                  </div>
+                )}
+              </ScrollArea>
+
+              {/* User Profile */}
+              <div className="p-4 border-t border-border/40">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start gap-2 rounded-lg"
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage
+                          src={user?.profilePicture}
+                          alt={user?.name || "User"}
+                        />
+                        <AvatarFallback>
+                          {user?.name
+                            ? user.name.split(" ")[0][0].toUpperCase() +
+                              (user.name.split(" ")[1]?.[0]?.toUpperCase() ||
+                                "")
+                            : "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">
+                          {user?.name || "Guest"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {user?.email}
+                        </span>
+                      </div>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
+          </AnimatedElement>
+        )}
 
-            <Separator className="my-2" />
-
-            {/* Chat List */}
-            <ScrollArea className="flex-1 px-2">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center h-40">
-                  <LoadingSpinner size="lg" text="Loading chats..." />
-                </div>
-              ) : filteredChats.length > 0 ? (
-                <div className="flex flex-col gap-1 px-2">
-                  {filteredChats.map((chat) => (
-                    <div
-                      key={chat.id}
-                      className={`group flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-accent/50 ${
-                        pathname === `/chat/${chat.id}` ? "bg-accent" : ""
-                      }`}
-                      onClick={() => handleSelectChat(chat.id)}
-                    >
-                      <div className="flex-1 min-w-0 cursor-pointer">
-                        {editingChatId === chat.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleEditChat(chat.id, editTitle);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex gap-1"
-                          >
-                            <Input
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              className="h-8"
-                              autoFocus
-                            />
-                            <Button type="submit" size="sm" variant="ghost">
-                              Save
-                            </Button>
-                          </form>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <MessageSquare className="h-4 w-4 text-primary flex-shrink-0" />
-                              <p className="font-medium truncate">{chat.title}</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {chat.preview}
-                            </p>
-                          </>
-                        )}
-                      </div>
-
-                      {editingChatId !== chat.id && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Only allow generating title if it hasn't been generated before
-                                    if (chat.title === "New Chat") {
-                                      handleGenerateTitle(chat.id);
-                                    }
-                                  }}
-                                  disabled={chat.title !== "New Chat"}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {chat.title === "New Chat" ? "Generate AI title" : "Title already generated"}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingChatId(chat.id);
-                              setEditTitle(chat.title);
-                            }}
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setChatToDelete(chat.id);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
-
-                      <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
-                        {formatDate(chat.updatedAt)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-40 px-4 text-center">
-                  <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No chats found</p>
-                  {searchQuery && (
-                    <p className="text-sm text-muted-foreground">
-                      Try a different search term
-                    </p>
-                  )}
-                </div>
-              )}
-            </ScrollArea>
-
-            {/* User Profile */}
-            <div className="p-4 border-t border-border/40">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-2 rounded-lg"
-                  >
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage
-                        src={user?.profilePicture}
-                        alt={user?.name || "User"}
-                      />
-                      <AvatarFallback>
-                        {user?.name ? user.name.split(' ')[0][0].toUpperCase() + (user.name.split(' ')[1]?.[0]?.toUpperCase() || '') : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{user?.name || "Guest"}</span>
-                      <span className="text-xs text-muted-foreground">{user?.email}</span>
-                    </div>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuItem asChild>
-                    <Link href="/settings">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Log out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </AnimatedElement>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Chat</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this chat? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => chatToDelete && handleDeleteChat(chatToDelete)}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Chat</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this chat? This action cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsDeleteDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => chatToDelete && handleDeleteChat(chatToDelete)}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </>
   );
 }

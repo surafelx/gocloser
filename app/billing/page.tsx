@@ -667,16 +667,16 @@ function BillingPageContent() {
                         </p>
                         <p className="text-sm text-muted-foreground">
                           {i === 1
-                            ? "Professional"
+                            ? "Pro"
                             : i === 2
-                            ? "Professional"
+                            ? "Pro"
                             : "Starter"}{" "}
                           Plan
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="font-medium">
-                          ${i === 1 || i === 2 ? "79.00" : "29.00"}
+                          ${i === 1 || i === 2 ? "39.00" : "19.00"}
                         </p>
                         <Badge
                           variant="outline"
@@ -834,9 +834,9 @@ function BillingPageContent() {
                 value={additionalTokens}
                 onChange={(e) => setAdditionalTokens(Number(e.target.value))}
               >
+                <option value={50000}>50,000 tokens ($3)</option>
                 <option value={100000}>100,000 tokens ($5)</option>
                 <option value={500000}>500,000 tokens ($20)</option>
-                <option value={1000000}>1,000,000 tokens ($35)</option>
               </select>
             </div>
 

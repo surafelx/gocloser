@@ -32,61 +32,47 @@ export const SUBSCRIPTION_PLANS = {
   FREE: {
     id: "free",
     name: "Free",
-    description: "Basic access with limited features",
+    description: "Chat + Uploads Only",
     price: 0,
-    whopPlanId: "", // No Whop plan ID for free plan
-    tokenLimit: 100000, // 100k tokens for free users
+    whopPlanId: "plan_N3GriEsQel2QE", // Free plan ID from checkout link
+    tokenLimit: 10000, // 10k tokens for free users
     features: [
-      "Limited AI coaching sessions",
-      "Basic sales call analysis",
-      "2 file uploads per month",
-      "Community support",
+      "Gemini chat from file uploads",
+      "10K tokens",
+      "No voice support",
     ],
+    hasVoiceSupport: false,
   },
   STARTER: {
     id: "starter",
     name: "Starter",
-    description: "Perfect for individual sales professionals",
-    price: 29,
-    whopPlanId: "plan_M51GxRBJQNjl1", // Whop plan ID from checkout link
-    tokenLimit: 100000,
+    description: "Chat + Uploads Only",
+    price: 19,
+    whopPlanId: "plan_ieiZ2npe7k6gp", // Starter plan ID from checkout link
+    tokenLimit: 500000, // 500k tokens/month
     features: [
-      "Unlimited AI coaching sessions",
-      "Basic sales call analysis",
-      "5 file uploads per month",
-      "Email support",
+      "Gemini chat from file uploads",
+      "~500K tokens/month",
+      "No voice support",
     ],
+    hasVoiceSupport: false,
   },
   PROFESSIONAL: {
     id: "professional",
-    name: "Professional",
-    description: "For serious sales professionals",
-    price: 79,
-    whopPlanId: "plan_M51GxRBJQNjl1", // Using same plan for now, can be updated later
-    tokenLimit: 500000,
+    name: "Pro",
+    description: "Chat + Uploads + 48 hrs Voice",
+    price: 39,
+    whopPlanId: "plan_IeJ2izkJfj2L3", // Pro plan ID from checkout link
+    tokenLimit: 1000000, // 1M tokens/month
     features: [
-      "Everything in Starter",
-      "Advanced performance analytics",
-      "Unlimited file uploads",
+      "Everything in Starter +",
+      "48 hours of Whisper transcription/month",
+      "~1M tokens/month",
+      "Audio/video uploads",
       "Priority support",
-      "Custom training data integration",
     ],
-  },
-  TEAM: {
-    id: "team",
-    name: "Team",
-    description: "For sales teams and organizations",
-    price: 199,
-    whopPlanId: "plan_M51GxRBJQNjl1", // Using same plan for now, can be updated later
-    tokenLimit: 2000000,
-    features: [
-      "Everything in Professional",
-      "Team analytics dashboard",
-      "Admin controls",
-      "Dedicated account manager",
-      "Custom AI training",
-      "API access",
-    ],
+    hasVoiceSupport: true,
+    voiceHoursLimit: 48, // 48 hours of voice transcription
   },
 };
 
@@ -113,17 +99,24 @@ export async function createCheckoutLink(planId: string, userId: string, email: 
       throw new Error("Invalid plan ID or free plan selected");
     }
 
-    // Use direct checkout link for all plans
-    // Add query parameters for tracking and user identification
-    const checkoutUrl = `https://whop.com/checkout/plan_M51GxRBJQNjl1?d2c=true&email=${encodeURIComponent(email)}&metadata=${encodeURIComponent(JSON.stringify({ userId, planId }))}`;
+    // Use the plan-specific checkout links
+    let checkoutUrl;
 
-    // Add plan-specific parameters if needed
-    if (planId === "professional") {
-      // You can customize the URL for professional plan if needed
-      console.log("Creating checkout link for Professional plan");
-    } else if (planId === "team") {
-      // You can customize the URL for team plan if needed
-      console.log("Creating checkout link for Team plan");
+    switch (planId) {
+      case "free":
+        checkoutUrl = `https://whop.com/checkout/plan_N3GriEsQel2QE?d2c=true&email=${encodeURIComponent(email)}&metadata=${encodeURIComponent(JSON.stringify({ userId, planId }))}`;
+        console.log("Creating checkout link for Free plan");
+        break;
+      case "starter":
+        checkoutUrl = `https://whop.com/checkout/plan_ieiZ2npe7k6gp?d2c=true&email=${encodeURIComponent(email)}&metadata=${encodeURIComponent(JSON.stringify({ userId, planId }))}`;
+        console.log("Creating checkout link for Starter plan");
+        break;
+      case "professional":
+        checkoutUrl = `https://whop.com/checkout/plan_IeJ2izkJfj2L3?d2c=true&email=${encodeURIComponent(email)}&metadata=${encodeURIComponent(JSON.stringify({ userId, planId }))}`;
+        console.log("Creating checkout link for Professional plan");
+        break;
+      default:
+        throw new Error(`Unknown plan ID: ${planId}`);
     }
 
     return checkoutUrl;

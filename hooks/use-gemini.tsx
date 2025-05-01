@@ -70,16 +70,7 @@ export function useGemini({ initialMessages = [] }: UseGeminiProps = {}) {
     setIsLoading(true);
 
     try {
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content,
-      };
-
-      // Add user message to state
-      setMessages((prev) => [...prev, userMessage]);
-
-      // Format history for Gemini
+      // Format history for Gemini - use the current messages
       const history = formatHistoryForGemini(messages);
 
       // Send request to API
@@ -101,26 +92,27 @@ export function useGemini({ initialMessages = [] }: UseGeminiProps = {}) {
 
       const data = await response.json();
 
-      // Add assistant message to state
+      // Create assistant message with consistent ID format
       const assistantMessage: Message = {
-        id: Date.now().toString(),
+        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         role: 'assistant',
         content: data.response,
+        tokenUsage: data.tokenUsage || undefined,
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      // We don't need to update local state since the chat context will handle this
       return assistantMessage;
     } catch (error) {
       console.error('Error sending message:', error);
 
-      // Add error message
+      // Create error message with consistent ID format
       const errorMessage: Message = {
-        id: Date.now().toString(),
+        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         role: 'assistant',
         content: 'I apologize, but I encountered an error processing your request. Please try again.',
       };
 
-      setMessages((prev) => [...prev, errorMessage]);
+      // Return the error message to be saved by the chat context
       return errorMessage;
     } finally {
       setIsLoading(false);

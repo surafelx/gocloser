@@ -41,16 +41,16 @@ export const SUBSCRIPTION_PLANS = {
   FREE: {
     id: "free",
     name: "Free",
-    description: "Basic access with limited features",
+    description: "Chat + Uploads Only",
     price: 0,
     priceId: "", // No Stripe price ID for free plan
-    tokenLimit: 100000, // 100k tokens for free trial
+    tokenLimit: 10000, // 10k tokens for free users
     features: [
-      "Limited chat sessions",
-      "Basic file analysis",
-      "2 file uploads",
-      "Community support",
+      "Gemini chat from file uploads",
+      "10K tokens",
+      "No voice support",
     ],
+    hasVoiceSupport: false,
   },
   STARTER: {
     id: "starter",
@@ -62,9 +62,9 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       "Gemini chat from file uploads",
       "~500K tokens/month",
-      "File upload support",
-      "Standard support",
+      "No voice support",
     ],
+    hasVoiceSupport: false,
   },
   PROFESSIONAL: {
     id: "professional",
@@ -74,12 +74,14 @@ export const SUBSCRIPTION_PLANS = {
     priceId: "price_1REWoUECvX5ewvci8lNRIlil",
     tokenLimit: 1000000, // 1M tokens/month
     features: [
-      "Everything in Starter",
-      "48 hours Whisper transcription/month",
+      "Everything in Starter +",
+      "48 hours of Whisper transcription/month",
       "~1M tokens/month",
       "Audio/video uploads",
       "Priority support",
     ],
+    hasVoiceSupport: true,
+    voiceHoursLimit: 48, // 48 hours of voice transcription
   },
 };
 
