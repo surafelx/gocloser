@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { transcribeWithGoogleSpeech } from "@/lib/google-speech";
 import {
   uploadToS3,
   deleteFromS3
@@ -33,7 +32,8 @@ export async function POST(request: NextRequest) {
 
     // Get the user's plan
     const planId = subscription?.planId || "free";
-    const plan = getPlanById(planId);
+    // Get plan details (currently unused but kept for future use)
+    getPlanById(planId);
 
     // NOTE: Plan restriction check is temporarily disabled
     /*
@@ -113,11 +113,37 @@ export async function POST(request: NextRequest) {
         throw new Error("AWS S3 is not properly configured");
       }
 
-      // Upload directly to S3
+      // For video files, we need to set the correct content type
+      // Google Speech-to-Text works best with audio formats
+      let fileTypeForUpload = file.type;
+
+      // Determine the best content type for Google Speech compatibility
+      if (fileType === "video") {
+        console.log("Video file detected, setting content type to audio/wav for Google Speech compatibility");
+        fileTypeForUpload = "audio/wav"; // LINEAR16 encoding works best with WAV
+      } else if (fileType === "audio") {
+        // For audio files, check the specific format
+        if (file.type.includes('mp3')) {
+          console.log("MP3 audio detected, keeping original content type");
+          fileTypeForUpload = "audio/mpeg";
+        } else if (file.type.includes('wav') || file.type.includes('wave')) {
+          console.log("WAV audio detected, setting content type to audio/wav");
+          fileTypeForUpload = "audio/wav";
+        } else if (file.type.includes('ogg')) {
+          console.log("OGG audio detected, setting content type to audio/ogg");
+          fileTypeForUpload = "audio/ogg";
+        } else {
+          // For other audio formats, use WAV as it's most compatible with LINEAR16
+          console.log("Unknown audio format detected, setting content type to audio/wav for compatibility");
+          fileTypeForUpload = "audio/wav";
+        }
+      }
+
+      // Upload to S3
       uploadResponse = await uploadToS3(buffer, {
         folder: "temp_transcriptions",
         publicId: `temp_${Date.now()}_s3`,
-        fileType: file.type
+        fileType: fileTypeForUpload
       });
 
       console.log("Successfully uploaded to S3");
@@ -142,16 +168,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // We'll use the S3 URL directly for both audio and video
-    // Google Speech-to-Text can handle both
-    const audioUrl = fileUrl;
+    // For video files, we need to handle them differently
+    // Google Speech-to-Text can't process video directly
+    let audioUrl = fileUrl;
+
+    // If it's a video file, extract the audio
+    if (fileType === "video") {
+      console.log("Video file detected. Converting to audio and preparing for transcription.");
+
+      try {
+        // Import the extractAudioFromS3Video function
+        const { extractAudioFromS3Video } = await import("@/lib/s3");
+
+        // Extract audio from the video
+        console.log("Converting video to audio format...");
+        const extractedAudioUrl = await extractAudioFromS3Video(uploadResponse.public_id);
+        console.log(`Extracted audio URL: ${extractedAudioUrl}`);
+
+        // Use the extracted audio URL
+        audioUrl = extractedAudioUrl;
+
+        console.log("Video successfully converted to audio format");
+        console.log("Audio will be processed in chunks if longer than 50 seconds");
+      } catch (extractionError: any) {
+        console.error("Error extracting audio from video:", extractionError);
+        console.log("Will attempt to process video directly, but may fail depending on the format.");
+      }
+    }
 
     // Transcribe the audio directly with Google Speech-to-Text
     try {
       console.log(`Starting Google Speech-to-Text transcription of: ${audioUrl}`);
 
-      // Directly call Google Speech-to-Text with the S3 URL
-      const transcript = await transcribeWithGoogleSpeech(audioUrl);
+      // For S3 URLs, we need to use the regular transcribeWithGoogleSpeech
+      // but we'll split the audio into chunks in the Google Speech library
+      console.log("Using chunked transcription for S3 URL to handle long audio");
+
+      // Import the regular transcribe function that handles chunking
+      const { transcribe } = await import("@/lib/google-speech");
+      const transcript = await transcribe(audioUrl);
 
       if (!transcript) {
         throw new Error("Empty transcript received");
@@ -159,15 +214,31 @@ export async function POST(request: NextRequest) {
 
       console.log(`Google Speech-to-Text transcription successful, length: ${transcript.length} characters`);
 
-      // Track token usage for audio recording (100 tokens per recording)
+      // Track token usage for audio recording
       try {
         const userId = currentUser.id || currentUser.userId;
+
+        // Calculate token usage based on transcript length
+        // Estimate 1 token per 4 characters of transcript (approximate)
+        const transcriptTokens = Math.ceil(transcript.length / 4);
+
+        // Use the larger of the base cost or the calculated tokens
+        // This ensures we charge at least the minimum for any transcription
+        const promptTokens = Math.max(TOKEN_COSTS.AUDIO_RECORDING, transcriptTokens);
+
+        // Log the token calculation
+        console.log(`Transcript length: ${transcript.length} characters`);
+        console.log(`Estimated tokens: ${transcriptTokens}`);
+        console.log(`Final prompt tokens: ${promptTokens}`);
+
+        // Update token usage in the database
         await updateTokenUsage(
           userId,
-          TOKEN_COSTS.AUDIO_RECORDING, // Prompt tokens (100 for audio recording)
+          promptTokens, // Prompt tokens based on transcript length
           0 // Completion tokens
         );
-        console.log(`[TOKEN-TRACKING] User ${userId} used ${TOKEN_COSTS.AUDIO_RECORDING} tokens for AUDIO_RECORDING`);
+
+        console.log(`[TOKEN-TRACKING] User ${userId} used ${promptTokens} tokens for transcription`);
 
         // Note: Token usage is tracked but not enforced for plan restrictions
       } catch (tokenError) {
@@ -190,9 +261,49 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Calculate token usage for the response
+      // Estimate 1 token per 4 characters of transcript (approximate)
+      const transcriptTokens = Math.ceil(finalTranscript.length / 4);
+
+      // Calculate additional tokens based on audio duration (if available)
+      let durationBasedTokens = 0;
+
+      // Try to get audio duration from the file
+      let audioDurationSeconds = 0;
+      try {
+        // Estimate duration based on transcript length (very rough approximation)
+        // Average speaking rate is about 150 words per minute
+        // Average word is about 5 characters
+        // So 150 words * 5 chars = 750 characters per minute
+        audioDurationSeconds = Math.ceil(finalTranscript.length / (750 / 60));
+
+        // Calculate tokens based on duration: TOKEN_COSTS.TRANSCRIPTION_PER_MINUTE tokens per minute
+        const durationMinutes = audioDurationSeconds / 60;
+        durationBasedTokens = Math.ceil(durationMinutes * TOKEN_COSTS.TRANSCRIPTION_PER_MINUTE);
+        console.log(`Estimated audio duration: ${audioDurationSeconds}s (${durationMinutes.toFixed(2)} minutes)`);
+        console.log(`Duration-based tokens: ${durationBasedTokens}`);
+      } catch (durationError) {
+        console.error("Error calculating duration-based tokens:", durationError);
+      }
+
+      // Use the larger of the base cost, transcript-based tokens, or duration-based tokens
+      const promptTokens = Math.max(
+        TOKEN_COSTS.AUDIO_RECORDING,
+        transcriptTokens,
+        durationBasedTokens
+      );
+
+      console.log(`Final token calculation: max(${TOKEN_COSTS.AUDIO_RECORDING}, ${transcriptTokens}, ${durationBasedTokens}) = ${promptTokens}`);
+
       return NextResponse.json({
         transcript: finalTranscript,
         transcriptionMethod: "google-speech",
+        audioDuration: audioDurationSeconds || 0,
+        tokenUsage: {
+          promptTokens: promptTokens,
+          completionTokens: 0,
+          totalTokens: promptTokens
+        }
       });
     } catch (error: any) {
       console.error("Transcription error:", error);
@@ -202,10 +313,36 @@ export async function POST(request: NextRequest) {
 
       if (error.message.includes("Audio file not found")) {
         errorMessage = "The audio file could not be accessed. Please try again with a different file.";
-      } else if (error.message.includes("Failed to download")) {
-        errorMessage = "Could not download the audio file from Cloudinary. Please try again.";
-      } else if (error.message.includes("Whisper") && error.message.includes("Google")) {
-        errorMessage = "Both transcription services failed. Please try a different audio format.";
+      } else if (error.message.includes("Failed to download") || error.message.includes("Failed to fetch")) {
+        errorMessage = "Could not download the audio file. Please try again.";
+      } else if (error.message.includes("encoding")) {
+        errorMessage = "The audio format is not supported. Please try a different audio format (WAV or MP3 recommended).";
+      } else if (error.message.includes("sample_rate_hertz") && error.message.includes("WAV header")) {
+        errorMessage = "There was an issue with the WAV file sample rate. We've updated our handling for WAV files, please try again.";
+      } else if (error.message.includes("No transcription results")) {
+        errorMessage = "No speech was detected in the audio. Please check the audio file and try again.";
+      } else if (error.message.includes("too large") || error.message.includes("Sync input too long")) {
+        errorMessage = "The audio file is too long for synchronous transcription. We're now using chunked transcription, please try again.";
+      } else if (error.message.includes("No speech content could be detected")) {
+        errorMessage = "No speech could be detected in the audio file. Please check that the file contains speech and try again.";
+      } else if (error.message.includes("LongRunningRecognize")) {
+        errorMessage = "There was an issue with the transcription. Please try again with a different audio format.";
+      } else if (error.message.includes("Failed to extract audio from video")) {
+        errorMessage = "There was an issue extracting audio from the video file. Please try converting the video to audio before uploading.";
+      } else if (error.message.includes("Sync input too long") && fileType === "video") {
+        errorMessage = "The video file is too long. We're now processing it in chunks. Please try again.";
+      } else if (fileType === "video") {
+        errorMessage = "There was an issue transcribing the video file. Please try converting the video to audio (MP3 or WAV) before uploading.";
+      }
+
+      // Clean up any temporary files if possible
+      if (uploadResponse && uploadResponse.public_id) {
+        try {
+          await deleteFromS3(uploadResponse.public_id);
+          console.log("Cleaned up S3 file after error:", uploadResponse.public_id);
+        } catch (cleanupError) {
+          console.error("Error cleaning up S3 file after transcription error:", cleanupError);
+        }
       }
 
       return NextResponse.json(

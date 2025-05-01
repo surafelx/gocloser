@@ -58,6 +58,12 @@ export function ChatMessage({
     });
   }
 
+  // Force role to be either 'user' or 'assistant' if it's not set correctly
+  if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system') {
+    console.warn(`[CHAT-MESSAGE] Invalid role detected: ${message.role}, defaulting to 'assistant'`);
+    message.role = 'assistant';
+  }
+
   // Use isLoading to determine if we should show a loading state
   const showLoading = isLoading && message.id.startsWith('loading');
 

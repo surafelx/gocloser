@@ -36,6 +36,14 @@ const MODEL_PRICING = {
     input: 0.0025,   // $0.0025 per 1K input tokens
     output: 0.0005,  // $0.0005 per 1K output tokens
   },
+  'google-speech': {
+    input: 0.0006,   // $0.0006 per 1K input tokens (approximation for Speech-to-Text)
+    output: 0,       // No output tokens for transcription
+  },
+  'interaction': {
+    input: 0.0001,   // $0.0001 per 1K input tokens (minimal cost for interactions)
+    output: 0,       // No output tokens for interactions
+  },
 };
 
 // Default token limit per session

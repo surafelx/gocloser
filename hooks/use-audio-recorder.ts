@@ -193,7 +193,7 @@ export function useAudioRecorder({
         variant: 'destructive',
       });
     }
-  }, [onRecordingComplete, recordingDuration, toast]);
+  }, [onRecordingComplete, toast]); // Removed recordingDuration from dependencies
 
   // Stop recording function
   const stopRecording = useCallback(() => {
@@ -211,6 +211,10 @@ export function useAudioRecorder({
 
     try {
       console.log('MediaRecorder state before stopping:', mediaRecorderRef.current.state);
+
+      // Capture the current duration before stopping
+      const finalDuration = recordingDuration;
+      console.log(`Final recording duration: ${finalDuration}s`);
 
       // Request a final dataavailable event
       if (mediaRecorderRef.current.state === 'recording') {
@@ -256,7 +260,7 @@ export function useAudioRecorder({
         setError('No audio data was captured. Please check your microphone and try again.');
 
         if (onRecordingComplete) {
-          onRecordingComplete(emptyBlob, recordingDuration);
+          onRecordingComplete(emptyBlob, finalDuration);
         }
       }
     } catch (err: any) {

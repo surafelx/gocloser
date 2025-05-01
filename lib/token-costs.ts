@@ -6,12 +6,16 @@
 export const TOKEN_COSTS = {
   // Each chat message costs 1 token
   CHAT_MESSAGE: 1,
-  
+
   // Each file upload costs 10 tokens
   FILE_UPLOAD: 10,
-  
-  // Each audio recording costs 100 tokens
+
+  // Base cost for audio recording/transcription (minimum cost)
   AUDIO_RECORDING: 100,
+
+  // Cost per minute of transcription (in addition to base cost)
+  // This is used for calculating token usage based on audio length
+  TRANSCRIPTION_PER_MINUTE: 50,
 };
 
 /**
@@ -35,10 +39,10 @@ export async function trackInteractionTokens(
   try {
     // Calculate token cost
     const tokenCost = calculateTokenCost(interactionType);
-    
+
     // Log the token usage
     console.log(`[TOKEN-TRACKING] User ${userId} used ${tokenCost} tokens for ${interactionType}`, metadata);
-    
+
     // Track token usage via API
     const response = await fetch('/api/token-usage', {
       method: 'POST',
@@ -58,13 +62,13 @@ export async function trackInteractionTokens(
         },
       }),
     });
-    
+
     if (!response.ok) {
       const data = await response.json();
       console.error('[TOKEN-TRACKING] Failed to track token usage:', data);
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.error('[TOKEN-TRACKING] Error tracking token usage:', error);

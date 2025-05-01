@@ -181,16 +181,18 @@ export default function ChatPage() {
           let mimeType = 'audio/webm';
 
           if (blob.type) {
+            console.log(`Detected blob type: ${blob.type}`);
             if (blob.type.includes('mp3') || blob.type.includes('mpeg')) {
               fileExtension = 'mp3';
               mimeType = 'audio/mpeg';
-            } else if (blob.type.includes('oggFix ')) {
+            } else if (blob.type.includes('ogg')) {
               fileExtension = 'ogg';
               mimeType = 'audio/ogg';
             } else if (blob.type.includes('wav')) {
               fileExtension = 'wav';
               mimeType = 'audio/wav';
             }
+            console.log(`Using file extension: ${fileExtension}, MIME type: ${mimeType}`);
           }
 
           const file = new File(
@@ -619,6 +621,18 @@ export default function ChatPage() {
             // Show success message with transcription method
             setProcessingError(`Successfully transcribed ${fileType} content using ${transcriptionMethod}. Analyzing...`)
 
+            // Track token usage if available
+            if (responseData?.tokenUsage) {
+              console.log(`Tracking token usage for transcription: ${JSON.stringify(responseData.tokenUsage)}`);
+              addTokenUsage({
+                promptTokens: responseData.tokenUsage.promptTokens,
+                completionTokens: responseData.tokenUsage.completionTokens,
+                totalTokens: responseData.tokenUsage.totalTokens,
+                estimatedCost: 0, // Will be calculated by the hook
+                model: 'google-speech' // Using speech model for transcription
+              });
+            }
+
             // Update progress
             updateProgress(80)
           } catch (error) {
@@ -807,16 +821,37 @@ export default function ChatPage() {
       setRecordingComplete(false);
       setShowAudioPlayer(false);
       setAudioBlob(null);
+      setSelectedFile(null); // Clear any previously selected file
 
       try {
         console.log('Attempting to start recording...');
         await startRecording();
         console.log('Recording started successfully');
+
+        // Show a toast to indicate recording has started
+        toast({
+          title: 'Recording Started',
+          description: 'Speak clearly into your microphone. Click "Done" when finished.',
+        });
       } catch (error) {
         console.error('Error starting recording:', error);
+
+        // Provide more specific error messages based on the error
+        let errorMessage = 'Failed to start recording. Please check your microphone permissions.';
+
+        if (error instanceof Error) {
+          if (error.message.includes('Permission denied') || error.message.includes('NotAllowedError')) {
+            errorMessage = 'Microphone access was denied. Please allow microphone access in your browser settings.';
+          } else if (error.message.includes('NotFoundError')) {
+            errorMessage = 'No microphone found. Please connect a microphone and try again.';
+          } else if (error.message.includes('NotReadableError')) {
+            errorMessage = 'Your microphone is busy or not working properly. Please try again.';
+          }
+        }
+
         toast({
           title: 'Recording Error',
-          description: error instanceof Error ? error.message : 'Failed to start recording. Please check your microphone permissions.',
+          description: errorMessage,
           variant: 'destructive',
         });
       }
@@ -826,13 +861,34 @@ export default function ChatPage() {
         console.log('Attempting to stop recording...');
         stopRecording();
         console.log('Recording stopped successfully');
+
+        // Show a toast to indicate recording has stopped
+        toast({
+          title: 'Recording Complete',
+          description: 'Your recording is ready. Click "Use Recording" to send it.',
+        });
       } catch (error) {
         console.error('Error stopping recording:', error);
+
+        // Provide more specific error messages based on the error
+        let errorMessage = 'Failed to stop recording.';
+
+        if (error instanceof Error) {
+          if (error.message.includes('No MediaRecorder')) {
+            errorMessage = 'Recording session was lost. Please try recording again.';
+          } else if (error.message.includes('No audio data')) {
+            errorMessage = 'No audio was captured. Please check your microphone and try again.';
+          }
+        }
+
         toast({
           title: 'Recording Error',
-          description: error instanceof Error ? error.message : 'Failed to stop recording.',
+          description: errorMessage,
           variant: 'destructive',
         });
+
+        // Reset recording state
+        cancelRecording();
       }
     }
   }
@@ -887,8 +943,16 @@ export default function ChatPage() {
                 console.log('Submitting form with recorded audio file');
                 setShowAudioPlayer(false);
 
-                // Process the file by triggering the form submission
-                handleSendMessage(new Event('submit') as any);
+                // Set a default message if none is provided
+                if (!input.trim()) {
+                  setInput("Here's a voice recording I'd like to transcribe.");
+                }
+
+                // Add a small delay to ensure the input state is updated
+                setTimeout(() => {
+                  // Process the file by triggering the form submission
+                  handleSendMessage(new Event('submit') as any);
+                }, 100);
               } catch (error) {
                 console.error('Error processing audio file:', error);
                 toast({
@@ -900,6 +964,7 @@ export default function ChatPage() {
             }}
             onCancel={() => {
               setShowAudioPlayer(false)
+              setSelectedFile(null)
               resetProcessing()
               cancelAudioRecording()
             }}
@@ -956,9 +1021,17 @@ export default function ChatPage() {
     console.log('Rendering message:', message.id, message.role, message.content.substring(0, 30) + '...')
 
     // Ensure the message role is properly set
+    // Force role to be either 'user' or 'assistant' if it's not set correctly
+    let role = message.role;
+    if (!role || (role !== 'user' && role !== 'assistant' && role !== 'system')) {
+      // Try to determine role from message ID
+      role = message.id.includes('user') ? 'user' : 'assistant';
+      console.warn(`Invalid or missing role "${message.role}" for message ${message.id}, defaulting to "${role}"`);
+    }
+
     const messageToRender = {
       ...message,
-      role: message.role || (message.id.includes('user') ? 'user' : 'assistant')
+      role: role
     };
 
     return (
@@ -1189,14 +1262,7 @@ I recommend practicing these techniques in our chat interface. Would you like to
 
                       return aTime - bTime;
                     })
-                    .map((message) => (
-                      <ChatMessage
-                        key={message.id}
-                        message={message}
-                        isLoading={isLoading && message.id.startsWith('loading')}
-                        onShowPerformance={(msg) => setCurrentAnalysis(msg)}
-                      />
-                    ))
+                    .map(renderMessage)
                 ) : (
                   <div className="p-4 text-center">
                     <p className="text-muted-foreground">No messages to display. Start a conversation!</p>
@@ -1305,10 +1371,13 @@ I recommend practicing these techniques in our chat interface. Would you like to
                 <div className="flex-1 flex items-center gap-3">
                   <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse"></div>
                   <div className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-primary" />
+                    <Clock className="h-5 w-5 text-primary animate-pulse" />
                     <span className="text-lg font-medium">{formatDuration(recordingDuration)}</span>
+                    <span className="text-xs text-muted-foreground animate-pulse">
+                      {recordingDuration % 2 === 0 ? "●" : "○"}
+                    </span>
                   </div>
-                  <span className="text-sm text-muted-foreground">Recording...</span>
+                  <span className="text-sm text-muted-foreground">Recording in progress...</span>
                 </div>
                 <div className="flex gap-2">
                   <AnimatedButton variant="outline" size="sm" className="rounded-full" onClick={cancelRecording} animation="shake">

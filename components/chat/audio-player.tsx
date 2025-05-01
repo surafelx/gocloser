@@ -109,8 +109,26 @@ export function AudioPlayer({ audioBlob, className, onConfirm, onCancel }: Audio
       console.log('Loading audio...');
       audio.load();
 
+      // Add a timeout to check if audio is loaded properly
+      const timeoutId = setTimeout(() => {
+        if (audio.readyState === 0) {
+          console.warn('Audio not loading properly, trying alternative approach');
+          // Try an alternative approach if the audio isn't loading
+          try {
+            const newAudio = new Audio();
+            newAudio.src = URL.createObjectURL(audioBlob);
+            audioRef.current = newAudio;
+            newAudio.load();
+            console.log('Using alternative audio loading approach');
+          } catch (fallbackError) {
+            console.error('Fallback audio loading failed:', fallbackError);
+          }
+        }
+      }, 2000);
+
       return () => {
         console.log('Cleaning up audio element');
+        clearTimeout(timeoutId);
         audio.removeEventListener('error', handleError);
         audio.removeEventListener('loadedmetadata', handleMetadata);
         audio.removeEventListener('ended', handleEnded);
@@ -121,7 +139,7 @@ export function AudioPlayer({ audioBlob, className, onConfirm, onCancel }: Audio
     } catch (error) {
       console.error('Error setting up audio element:', error);
     }
-  }, [audioUrl]);
+  }, [audioUrl, audioBlob]);
 
   // Update time display during playback
   const updateTimeDisplay = () => {
