@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
     const planId = subscription?.planId || "free";
     const plan = getPlanById(planId);
 
+    // NOTE: Plan restriction check is temporarily disabled
+    /*
     // Check if the plan supports voice transcription
     if (!plan.hasVoiceSupport) {
       return NextResponse.json(
@@ -46,6 +48,11 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    */
+
+    // Log plan information without enforcing restrictions
+    console.log(`User ${currentUser.id || currentUser.userId} on plan ${planId} is using transcription`);
+
 
     // Log environment variables (without revealing secrets)
     console.log("Environment check:", {
@@ -180,6 +187,8 @@ export async function POST(request: NextRequest) {
           0 // Completion tokens
         );
         console.log(`[TOKEN-TRACKING] User ${userId} used ${TOKEN_COSTS.AUDIO_RECORDING} tokens for AUDIO_RECORDING`);
+
+        // Note: Token usage is tracked but not enforced for plan restrictions
       } catch (tokenError) {
         console.error("Error tracking token usage for audio recording:", tokenError);
         // Continue with the response even if token tracking fails

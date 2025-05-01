@@ -168,12 +168,20 @@ export async function POST(request: NextRequest) {
     );
 
     // If token limit reached, return error
+    // NOTE: Token limit check is temporarily disabled
+    /*
     if (!updateResult.success && updateResult.limitReached) {
       console.log(`Token limit reached for user ${currentUser.id}`);
       return NextResponse.json(
         { error: 'Token limit reached. Please upgrade your plan to continue.' },
         { status: 403 }
       );
+    }
+    */
+
+    // Log token limit reached but continue anyway
+    if (!updateResult.success && updateResult.limitReached) {
+      console.log(`Token limit reached for user ${currentUser.id}, but allowing it for now`);
     }
 
     // If other error occurred, create token usage record directly

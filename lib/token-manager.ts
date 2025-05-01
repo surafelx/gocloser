@@ -5,6 +5,17 @@ import User from "@/models/User";
 import { SUBSCRIPTION_PLANS } from "./stripe";
 
 /**
+ * Calculate cost based on token usage
+ * This is a simple placeholder function for now
+ */
+function calculateCost(promptTokens: number, completionTokens: number): number {
+  // Simple cost calculation (can be refined later)
+  const promptCost = promptTokens * 0.00001; // $0.01 per 1000 prompt tokens
+  const completionCost = completionTokens * 0.00002; // $0.02 per 1000 completion tokens
+  return promptCost + completionCost;
+}
+
+/**
  * Check if a user has enough tokens for a request
  */
 export async function hasEnoughTokens(
@@ -87,9 +98,17 @@ export async function updateTokenUsage(
       console.log(`Current usage: ${subscription.tokensUsed}/${subscription.tokenLimit} tokens`);
 
       // Check if adding these tokens would exceed the limit
+      // NOTE: Token limit check is temporarily disabled
+      /*
       if (subscription.tokensUsed + totalTokens > subscription.tokenLimit) {
         console.log(`Token limit would be exceeded: ${subscription.tokensUsed} + ${totalTokens} > ${subscription.tokenLimit}`);
         return { success: false, limitReached: true };
+      }
+      */
+
+      // Log token usage without enforcing limits
+      if (subscription.tokensUsed + totalTokens > subscription.tokenLimit) {
+        console.log(`Token limit would be exceeded: ${subscription.tokensUsed} + ${totalTokens} > ${subscription.tokenLimit}, but allowing it for now`);
       }
 
       // Update the subscription with the new token usage
@@ -130,9 +149,17 @@ export async function updateTokenUsage(
       console.log(`Free plan usage: ${usedTokens}/${freeTokenLimit} tokens`);
 
       // Check if adding these tokens would exceed the free limit
+      // NOTE: Token limit check is temporarily disabled
+      /*
       if (usedTokens + totalTokens > freeTokenLimit) {
         console.log(`Free token limit would be exceeded: ${usedTokens} + ${totalTokens} > ${freeTokenLimit}`);
         return { success: false, limitReached: true };
+      }
+      */
+
+      // Log token usage without enforcing limits
+      if (usedTokens + totalTokens > freeTokenLimit) {
+        console.log(`Free token limit would be exceeded: ${usedTokens} + ${totalTokens} > ${freeTokenLimit}, but allowing it for now`);
       }
 
       // Try to find a free subscription for this user
