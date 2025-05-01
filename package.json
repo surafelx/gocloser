@@ -16,6 +16,7 @@
     "refresh:training": "node scripts/refresh-training-data.js",
     "process:pdfs": "node scripts/process-pdfs.js",
     "test:mongo": "node scripts/test-mongo-connection.js",
+    "test:s3": "node scripts/test-s3-upload.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -25,6 +26,8 @@
     "create-test-audio": "ts-node scripts/create-test-audio.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.800.0",
+    "@aws-sdk/lib-storage": "^3.800.0",
     "@google-cloud/speech": "^5.6.0",
     "@google/generative-ai": "latest",
     "@hookform/resolvers": "^3.9.1",

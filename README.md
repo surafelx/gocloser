@@ -16,6 +16,10 @@ GoCloser is an AI-powered sales coaching platform that helps sales professionals
 - TypeScript
 - Tailwind CSS
 - Google Gemini AI
+- Cloudinary for media storage
+- AWS S3 (fallback for media storage)
+- OpenAI Whisper for audio transcription
+- Google Cloud Speech-to-Text (fallback for transcription)
 
 ## Getting Started
 
@@ -24,6 +28,10 @@ GoCloser is an AI-powered sales coaching platform that helps sales professionals
 - Node.js 18 or later
 - npm or pnpm
 - Google Gemini API key
+- Cloudinary account
+- AWS account (optional, for S3 fallback)
+- OpenAI API key (for Whisper transcription)
+- Google Cloud account (optional, for Speech-to-Text fallback)
 
 ### Installation
 
@@ -38,9 +46,27 @@ GoCloser is an AI-powered sales coaching platform that helps sales professionals
    npm install
    ```
 
-3. Create a `.env.local` file in the root directory and add your Gemini API key:
+3. Create a `.env.local` file in the root directory with your API keys and configuration:
+   ```
+   # Copy from .env.example and fill in your values
+   cp .env.example .env.local
+   ```
+
+   At minimum, you need to set:
    ```
    NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+   CLOUDINARY_CLOUD_NAME=your_cloud_name
+   CLOUDINARY_API_KEY=your_api_key
+   CLOUDINARY_API_SECRET=your_api_secret
+   OPENAI_API_KEY=your_openai_api_key
+   ```
+
+   For S3 fallback (optional but recommended):
+   ```
+   AWS_REGION=us-east-1
+   AWS_ACCESS_KEY_ID=your_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_secret_access_key
+   AWS_S3_BUCKET=your_bucket_name
    ```
 
 4. Run the development server:
@@ -103,6 +129,16 @@ For detailed deployment instructions, see [deployment.md](deployment.md).
 ## Environment Variables
 
 - `NEXT_PUBLIC_GEMINI_API_KEY`: Your Google Gemini API key
+- `CLOUDINARY_CLOUD_NAME`: Your Cloudinary cloud name
+- `CLOUDINARY_API_KEY`: Your Cloudinary API key
+- `CLOUDINARY_API_SECRET`: Your Cloudinary API secret
+- `OPENAI_API_KEY`: Your OpenAI API key for Whisper transcription
+- `AWS_REGION`: AWS region for S3 fallback (default: us-east-1)
+- `AWS_ACCESS_KEY_ID`: AWS access key ID for S3 fallback
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key for S3 fallback
+- `AWS_S3_BUCKET`: AWS S3 bucket name for file storage fallback
+
+See `.env.example` for a complete list of environment variables.
 
 ## License
 
@@ -113,3 +149,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Google Gemini AI for powering the AI features
 - Vercel for Next.js hosting
 - Tailwind CSS for styling
+- Cloudinary for media storage and processing
+- AWS S3 for reliable fallback storage
+- OpenAI Whisper for audio transcription
+- Google Cloud Speech-to-Text for transcription fallback
