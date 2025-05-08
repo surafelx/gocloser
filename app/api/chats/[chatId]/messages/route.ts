@@ -60,6 +60,44 @@ export async function POST(
     await chat.save();
     console.log('Message added successfully, chat now has', chat.messages.length, 'messages');
 
+    // Check if this is a user message and if the chat title is still "New Chat"
+    // If so, and we have at least 2 user messages, trigger title generation
+    if (
+      message.role === 'user' &&
+      chat.title === "New Chat" &&
+      chat.messages.filter(msg => msg.role === 'user').length >= 2
+    ) {
+      try {
+        // Get user messages for title generation
+        const userMessages = chat.messages.filter(msg => msg.role === 'user').slice(0, 3);
+
+        // Only proceed if we have enough content
+        if (userMessages.length >= 2) {
+          console.log('Triggering automatic title generation for chat:', chatId);
+
+          // Call the title generation API
+          const titleResponse = await fetch(new URL('/api/chats/generate-title', request.url), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: chat.messages }),
+          });
+
+          if (titleResponse.ok) {
+            const titleData = await titleResponse.json();
+            if (titleData.title && titleData.title !== "New Chat") {
+              // Update the chat title
+              chat.title = titleData.title;
+              await chat.save();
+              console.log('Chat title automatically updated to:', titleData.title);
+            }
+          }
+        }
+      } catch (titleError) {
+        // Don't fail the main request if title generation fails
+        console.error('Error generating title automatically:', titleError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message,

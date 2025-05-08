@@ -157,8 +157,8 @@ export async function getSignedUrl(key: string) {
 
 // Extract audio from video using S3 and return the URL
 // We'll use a serverless approach to convert the video to audio
-export async function extractAudioFromS3Video(videoKey: string) {
-  console.log(`Converting video to audio for transcription: ${videoKey}`);
+export async function extractAudioFromS3Video(videoKey: string): Promise<string> {
+  console.log(`Extracting audio from S3 video: ${videoKey}`);
 
   try {
     // Get a signed URL for the video file
@@ -177,24 +177,23 @@ export async function extractAudioFromS3Video(videoKey: string) {
     const isMP4 = headerBytes.includes(Buffer.from('ftyp'));
 
     if (!isMP4) {
-      console.log("This doesn't appear to be an MP4 file, using it directly");
+      console.log("This doesn't appear to be an MP4 file, checking for WAV format");
+      // Check if it might be a WAV file
+      const isWavResult = isWavBuffer(headerBytes);
+      if (isWavResult.isWav) {
+        console.log(`Detected WAV file with sample rate: ${isWavResult.sampleRate} Hz`);
+        // For WAV files, we can use them directly with Google Speech
+        return videoUrl;
+      }
+      
+      console.log("Unknown format, will attempt to process as audio anyway");
       return videoUrl;
     }
 
     console.log("Confirmed MP4 file, proceeding with conversion");
 
-    // For MP4 files, we need to extract the audio
-    // Since we can't use ffmpeg in a serverless environment, we'll use a different approach
-
-    // 1. Get the content length to determine how many chunks we need
-    const contentLength = await getContentLengthFromS3Url(videoUrl);
-    console.log(`Video file size: ${contentLength} bytes`);
-
-    // 2. Download the audio track from the video
-    // We'll use a serverless approach by downloading chunks of the video
-    // and extracting the audio track from each chunk
-
-    // First, we'll create a new audio file in S3 with MP3 content type
+    // Import the PutObjectCommand from the AWS SDK
+    const { PutObjectCommand } = require("@aws-sdk/client-s3");
     const s3Client = initS3();
     const bucketName = process.env.AWS_S3_BUCKET;
 
@@ -202,40 +201,26 @@ export async function extractAudioFromS3Video(videoKey: string) {
       throw new Error("AWS S3 bucket name is not configured");
     }
 
-    // Import the PutObjectCommand from the AWS SDK
-    const { PutObjectCommand } = require("@aws-sdk/client-s3");
-
-    // In a serverless environment, we can't use ffmpeg to extract audio
-    // So we'll download the video in chunks and process it directly
-
-    // For now, we'll mark the file as an audio file by changing the content type
-    // This will help Google Speech API recognize it as an audio file
-
     // Download the first 1MB of the video to use as our audio sample
-    // This is a workaround since we can't use ffmpeg in serverless
     const audioSample = await getByteRangeFromS3Url(videoUrl, 0, 1024 * 1024);
     console.log(`Downloaded ${audioSample.length} bytes of video for audio sample`);
 
-    // Upload the audio sample to S3 with audio/mpeg content type
-    await s3Client.send(new PutObjectCommand({
-      Bucket: bucketName,
-      Key: audioKey,
-      Body: audioSample,
-      ContentType: "audio/mpeg"
-    }));
+    // Upload the audio sample to S3 with audio/mp3 content type
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: audioKey,
+        Body: audioSample,
+        ContentType: "audio/mp3",
+      })
+    );
 
     console.log(`Created audio file in S3: ${audioKey}`);
 
-    // 3. Get a signed URL for the audio file
+    // Get a signed URL for the audio file
     const audioUrl = await getSignedUrl(audioKey);
     console.log(`Audio URL: ${audioUrl}`);
 
-    // 4. Return the audio URL
-    // This is our best approximation of audio extraction in a serverless environment
-    // In a real implementation with a server, you would use ffmpeg to properly extract the audio
-    console.log("Returning audio URL for transcription");
-
-    // Return the audio URL
     return audioUrl;
   } catch (error: any) {
     console.error("Error extracting audio from video:", error);

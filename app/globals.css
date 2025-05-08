@@ -91,6 +91,15 @@
   }
 }
 
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
@@ -101,6 +110,10 @@
 
 .animate-bounce-small {
   animation: bounce-small 0.3s ease-in-out;
+}
+
+.animate-blink {
+  animation: blink 0.8s ease-in-out infinite;
 }
 
 /* Custom gradients */

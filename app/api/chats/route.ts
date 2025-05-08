@@ -70,10 +70,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Determine the title for the new chat
+    let chatTitle = title || "New Chat";
+
+    // If no title was provided but we have messages, try to generate one
+    if (!title && messages && messages.length > 0) {
+      try {
+        // Only attempt title generation if we have user messages
+        const userMessages = messages.filter(msg => msg.role === 'user');
+
+        if (userMessages.length > 0) {
+          console.log('Attempting to generate title for new chat with', userMessages.length, 'user messages');
+
+          // Call the title generation API
+          const titleResponse = await fetch(new URL('/api/chats/generate-title', request.url), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages }),
+          });
+
+          if (titleResponse.ok) {
+            const titleData = await titleResponse.json();
+            if (titleData.title && titleData.title !== "New Chat") {
+              chatTitle = titleData.title;
+              console.log('Generated title for new chat:', chatTitle);
+            }
+          }
+        }
+      } catch (titleError) {
+        console.error('Error generating title for new chat:', titleError);
+        // Continue with default title if generation fails
+      }
+    }
+
     // Create a new chat
     const chat = await Chat.create({
       userId: new mongoose.Types.ObjectId(currentUser.userId),
-      title: title || "New Chat",
+      title: chatTitle,
       messages: messages || [],
     });
 

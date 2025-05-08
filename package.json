@@ -28,7 +28,10 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.800.0",
     "@aws-sdk/lib-storage": "^3.800.0",
+    "@deepgram/sdk": "^4.0.1",
     "@google-cloud/speech": "^5.6.0",
+    "@google-cloud/storage": "^7.16.0",
+    "@google-cloud/video-intelligence": "^6.0.1",
     "@google/generative-ai": "latest",
     "@hookform/resolvers": "^3.9.1",
     "@langchain/community": "^0.3.40",

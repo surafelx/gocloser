@@ -1,46 +1,15 @@
 'use client';
 
-import React, { createContext,useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { useChatStorage } from '@/hooks/use-chat-storage';
-
-// Define message type
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  attachmentType?: 'audio' | 'video' | 'text';
-  attachmentName?: string;
-  isAnalysis?: boolean;
-  performanceData?: {
-    overallScore: number;
-    metrics: {
-      name: string;
-      score: number;
-    }[];
-    strengths: string[];
-    improvements: string[];
-  };
-  createdAt?: Date;
-  tokenUsage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
-
-// Define chat type
-interface Chat {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Message, Chat } from '@/types';
 
 interface ChatContextType {
   chat: Chat | null;
   messages: Message[];
   isLoading: boolean;
+  isSaving: boolean;
+  isCreating: boolean;
+  isGeneratingTitle: boolean;
   error: string | null;
   saveMessage: (message: Message) => Promise<void>;
   updateChat: (title: string) => Promise<void>;
@@ -50,110 +19,165 @@ interface ChatContextType {
   currentChatId: string | null;
   generateTitle: (messages: Message[]) => Promise<string>;
   updateTitleBasedOnMessages: (messages: Message[]) => Promise<void>;
+  loadingId?: string | null;
+  sendMessage?: (content: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children, initialMessages = [] }: { children: ReactNode, initialMessages?: Message[] }) {
-  console.log('[CHAT-CONTEXT] ChatProvider rendering');
-
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  // Add ref to track changes and prevent loops
-  const previousChatIdRef = useRef<string | null>(null);
-
-  // Log when the component mounts
+  // Keep track of messages in localStorage to prevent them from disappearing
   useEffect(() => {
-    console.log('[CHAT-CONTEXT] ChatProvider mounted');
-    return () => {
-      console.log('[CHAT-CONTEXT] ChatProvider unmounting');
-    };
+    // Load messages from localStorage on initial render
+    const savedMessages = localStorage.getItem('chatMessages');
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages);
+        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
+          setMessages(parsedMessages);
+        }
+      } catch (error) {
+        console.error('Error parsing saved messages:', error);
+      }
+    }
   }, []);
 
-  // Use the chat storage hook with the current chat ID
-  const {
-    chat,
-    messages,
-    isLoading,
-    error,
-    saveMessage,
-    updateChat,
-    createChat,
-    loadChat,
-    generateTitle,
-    updateTitleBasedOnMessages,
-  } = useChatStorage({
-    chatId: currentChatId || undefined,
-    initialMessages,
-  });
-
-  // Create a controlled setter for currentChatId that prevents excessive changes
-  // Defined after loadChat is available from the hook
-  const setCurrentChatIdControlled = useCallback((chatId: string | null) => {
-    console.log('[DEBUG-API-CALLS] setCurrentChatIdControlled called with:', chatId);
-
-    // Track call stack to debug where this is being called from
-    if (chatId) {
-      console.log('[DEBUG-API-CALLS] Current stack trace:', new Error().stack);
-    }
-
-    // Only update if the chat ID is actually different
-    if (chatId !== previousChatIdRef.current) {
-      console.log('[DEBUG-API-CALLS] Setting currentChatId from', previousChatIdRef.current, 'to', chatId);
-
-      // Update the ref first to prevent race conditions
-      previousChatIdRef.current = chatId;
-
-      // Then update the state
-      setCurrentChatId(chatId);
-
-      // If we're setting a new chat ID, load that chat
-      // But only if it's not null - we don't want to load a null chat
-      if (chatId) {
-        console.log('[DEBUG-API-CALLS] New chatId provided, calling loadChat with:', chatId);
-
-        // Use setTimeout to break potential circular dependencies
-        // This helps prevent cascading re-renders and API calls
-        setTimeout(() => {
-          loadChat(chatId);
-        }, 0);
-      } else {
-        console.log('[DEBUG-API-CALLS] No chatId provided, skipping loadChat');
-      }
-    } else {
-      console.log('[DEBUG-API-CALLS] Skipping redundant chat ID change to', chatId);
-    }
-  }, [loadChat]);
-
-  // Log when chat is loaded
+  // Save messages to localStorage whenever they change
   useEffect(() => {
-    if (chat) {
-      console.log('Chat loaded in context:', chat);
-    }
-  }, [chat]);
+    if (messages.length > 0) {
+      // Sort messages by timestamp before saving to ensure proper order
+      const sortedMessages = [...messages].sort((a, b) => {
+        // Extract timestamp from ID or use createdAt
+        const getTimestamp = (msg: Message) => {
+          if (msg.createdAt) {
+            return new Date(msg.createdAt).getTime();
+          }
+          // Extract timestamp from ID formats like "user-1234567890-abc" or "msg_1234567890_abc"
+          const match = msg.id.match(/[^-_]*(\d+)[^-_]*/);
+          return match ? parseInt(match[1]) : 0;
+        };
 
-  // Log when messages change
-  useEffect(() => {
-    console.log('Messages in context updated:', messages);
+        return getTimestamp(a) - getTimestamp(b);
+      });
+
+      localStorage.setItem('chatMessages', JSON.stringify(sortedMessages));
+    }
   }, [messages]);
 
+  // Send message with optimistic UI updates
+  const sendMessage = async (content: string) => {
+    if (!content.trim()) return;
+
+    // Create a user message with a more unique ID format
+    const userMessage: Message = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      role: "user",
+      content,
+      createdAt: new Date(),
+    };
+
+    // Create a temporary loading message
+    const loadingMessage: Message = {
+      id: `loading-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      role: "assistant",
+      content: "",
+      createdAt: new Date(),
+    };
+
+    // Log the messages being added
+    console.log('Adding user message:', userMessage.id, 'and loading message:', loadingMessage.id);
+
+    // Update UI immediately with both messages
+    setMessages(prev => {
+      // Check if the message already exists to prevent duplicates
+      const userExists = prev.some(m => m.content === content && m.role === 'user');
+      if (userExists) {
+        console.log('User message with same content already exists, not adding duplicate');
+        return [...prev, loadingMessage];
+      }
+      return [...prev, userMessage, loadingMessage];
+    });
+
+    setIsLoading(true);
+    setLoadingId(loadingMessage.id);
+
+    try {
+      // Send the actual API request
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content }),
+      });
+
+      if (!response.ok) throw new Error('Failed to send message');
+
+      const data = await response.json();
+
+      // Replace the loading message with the real response
+      setMessages(prev => prev.map(msg =>
+        msg.id === loadingMessage.id
+          ? { ...data.message, id: `assistant-${Date.now()}-${Math.random().toString(36).substring(2, 9)}` }
+          : msg
+      ));
+    } catch (error) {
+      console.error('Error sending message:', error);
+
+      // Replace loading message with error message
+      setMessages(prev => prev.map(msg =>
+        msg.id === loadingMessage.id
+          ? {
+              id: `error-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              role: "assistant",
+              content: "Sorry, I couldn't process your request. Please try again.",
+              createdAt: new Date(),
+            }
+          : msg
+      ));
+    } finally {
+      setIsLoading(false);
+      setLoadingId(null);
+    }
+  };
+
+  // Value object with optimized loading states
+  const value: ChatContextType = {
+    chat: null,
+    messages,
+    isLoading,
+    isSaving: false,
+    isCreating: false,
+    isGeneratingTitle: false,
+    error: null,
+    saveMessage: async (message: Message) => {
+      // Add message to state
+      setMessages(prev => [...prev, message]);
+    },
+    updateChat: async () => {},
+    createChat: async (title: string, initialMsgs: Message[]) => {
+      // Set messages and return a dummy ID
+      setMessages(initialMsgs);
+      const newId = `chat-${Date.now()}`;
+      setCurrentChatId(newId);
+      return newId;
+    },
+    loadChat: async () => {},
+    setCurrentChatId: (chatId: string | null) => {
+      setCurrentChatId(chatId);
+    },
+    currentChatId,
+    generateTitle: async () => "New Chat",
+    updateTitleBasedOnMessages: async () => {},
+    loadingId,
+    sendMessage
+  };
+
   return (
-    <ChatContext.Provider
-      value={{
-        chat,
-        messages,
-        isLoading,
-        error,
-        saveMessage,
-        updateChat,
-        createChat,
-        loadChat,
-        setCurrentChatId: setCurrentChatIdControlled, // Use our controlled setter
-        currentChatId,
-        generateTitle,
-        updateTitleBasedOnMessages,
-      }}
-    >
+    <ChatContext.Provider value={value}>
       {children}
     </ChatContext.Provider>
   );

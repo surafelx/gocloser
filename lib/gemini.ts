@@ -5,6 +5,7 @@ import {
 } from "@google/generative-ai";
 import fs from "fs/promises";
 import mime from "mime-types";
+import { selectRelevantDocuments } from './document-selector';
 
 // Initialize Gemini with your API key
 export function initGemini() {
@@ -67,6 +68,28 @@ export async function generateResponse(
   try {
     let enhancedSystemPrompt = systemPrompt;
     const lowerPrompt = prompt.toLowerCase();
+
+    // Select relevant documents based on the user's query
+    const { documents: relevantDocuments } = await selectRelevantDocuments(prompt, 3);
+
+    // Add relevant document content to the system prompt
+    if (relevantDocuments && relevantDocuments.length > 0) {
+      enhancedSystemPrompt += "\n\n### RELEVANT DOCUMENTS FOR THIS QUERY ###\n";
+
+      relevantDocuments.forEach((doc, index) => {
+        // Add document metadata
+        enhancedSystemPrompt += `\nDocument ${index + 1}: "${doc.title}" (Category: ${doc.category})\n`;
+
+        // Add a snippet of the document content (first 500 chars)
+        const contentPreview = doc.content.length > 500
+          ? doc.content.substring(0, 500) + "..."
+          : doc.content;
+
+        enhancedSystemPrompt += `Content: ${contentPreview}\n`;
+      });
+
+      enhancedSystemPrompt += "\nPlease use the information from these documents to provide a more accurate and helpful response.\n";
+    }
 
     if (trainingData) {
       if (
@@ -250,7 +273,7 @@ export async function analyzeContent(
   try {
     const genAI = initGemini();
     const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" });
-    
+
     // Create analysis prompt based on content type
     let prompt = `You are an AI sales coach analyzing ${contentType} content. Your task is to analyze this content and return ONLY a JSON object.
 
@@ -310,12 +333,12 @@ IMPORTANT: You must respond with ONLY a JSON object in this exact format, with n
       },
     });
 
-    const text = await result.response.text();
+    const text = result.response.text();
 
     try {
       // Clean and validate the response
       const cleanedText = text.replace(/```json\n?|\n?```/g, '').trim();
-      
+
       // Check if the text starts with a curly brace
       if (!cleanedText.startsWith('{')) {
         throw new Error('Response is not in JSON format');
@@ -351,7 +374,7 @@ IMPORTANT: You must respond with ONLY a JSON object in this exact format, with n
     } catch (parseError) {
       console.error("Error parsing Gemini response as JSON:", parseError);
       console.error("Raw response:", text);
-      
+
       // Return fallback data
       return {
         analysisText: "Error analyzing content. Please try again.",

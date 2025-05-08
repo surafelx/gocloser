@@ -1,11 +1,11 @@
 import fs from "fs";
-import { exec, execSync } from "child_process";
-import util from "util";
+import { execSync } from "child_process";
 import path from "path";
 import { SpeechClient } from "@google-cloud/speech";
 import axios from "axios";
 import os from "os";
 import { getByteRangeFromS3Url, getContentLengthFromS3Url } from "./s3";
+import { VideoIntelligenceServiceClient, protos } from '@google-cloud/video-intelligence';
 
 // Function to check if a buffer is a WAV file and get its sample rate
 function isWavBuffer(buffer: Buffer): { isWav: boolean; sampleRate: number | null } {
@@ -37,7 +37,8 @@ function isWavBuffer(buffer: Buffer): { isWav: boolean; sampleRate: number | nul
   }
 }
 
-const execPromise = util.promisify(exec);
+// Promisified exec for async operations
+// const execPromise = util.promisify(exec);
 
 // OpenAI API key for Whisper transcription
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -203,16 +204,241 @@ function splitAudio(audioFilePath: string, chunkDurationSec = 50): string[] {
   }
 }
 
+// Add these constants for GCS operations
+// const GCS_BUCKET = process.env.GCS_BUCKET || '';
+const GOOGLE_PROJECT_ID = process.env.GOOGLE_PROJECT_ID || '';
+const AUDIO_EXTRACTION_FUNCTION_URL = process.env.AUDIO_EXTRACTION_FUNCTION_URL || '';
+// const WHISPER_TRANSCRIPTION_FUNCTION_URL = process.env.WHISPER_TRANSCRIPTION_FUNCTION_URL || '';
+
+// Function to get GCS bucket and path from URL
+const parseGcsUrl = (url: string): { bucket: string, path: string } => {
+  if (url.startsWith('gs://')) {
+    const parts = url.replace('gs://', '').split('/');
+    return {
+      bucket: parts[0],
+      path: parts.slice(1).join('/')
+    };
+  } else if (url.startsWith('https://storage.googleapis.com/')) {
+    const parts = url.replace('https://storage.googleapis.com/', '').split('/');
+    return {
+      bucket: parts[0],
+      path: parts.slice(1).join('/')
+    };
+  }
+  throw new Error('Not a valid GCS URL');
+};
+
+// Function to request cloud audio extraction for videos
+const requestCloudAudioExtraction = async (videoUrl: string): Promise<string> => {
+  console.log(`Requesting cloud audio extraction for: ${videoUrl}`);
+
+  if (!AUDIO_EXTRACTION_FUNCTION_URL) {
+    throw new Error("AUDIO_EXTRACTION_FUNCTION_URL environment variable not set");
+  }
+
+  try {
+    // Parse the GCS URL to get bucket and path
+    const { bucket, path } = parseGcsUrl(videoUrl);
+
+    // Call the cloud function to extract audio
+    const response = await axios.post(AUDIO_EXTRACTION_FUNCTION_URL, {
+      bucket: bucket,
+      videoPath: path,
+      projectId: GOOGLE_PROJECT_ID
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 120000 // 2 minute timeout
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Cloud Function returned status ${response.status}`);
+    }
+
+    console.log("Cloud audio extraction successful");
+
+    // Return the full GCS URL to the extracted audio
+    return `gs://${bucket}/${response.data.audioGcsPath}`;
+  } catch (error: any) {
+    console.error(`Error calling audio extraction cloud function: ${error.message}`);
+    throw new Error(`Failed to extract audio from video: ${error.message}`);
+  }
+};
+
+// Function to transcribe audio directly from GCS using longRunningRecognize
+const transcribeGcsAudioWithLongRunningRecognize = async (
+  audioUrl: string,
+  encoding: string = "MP3",
+  sampleRateHertz: number | null = 16000
+): Promise<string> => {
+  console.log(`Transcribing GCS audio with LongRunningRecognize: ${audioUrl}`);
+
+  const client = new SpeechClient({
+    keyFilename: GOOGLE_CREDENTIALS_PATH,
+  });
+
+  // Parse the GCS URL
+  const { bucket, path } = parseGcsUrl(audioUrl);
+
+  // Create the audio source pointing directly to the GCS file
+  const audio = {
+    uri: `gs://${bucket}/${path}`
+  };
+
+  // Configure the request
+  const config: any = {
+    encoding: encoding,
+    languageCode: "en-US",
+    enableAutomaticPunctuation: true,
+    model: "video",
+    useEnhanced: true,
+    audioChannelCount: 1,
+  };
+
+  // Only add sampleRateHertz if it's not null
+  if (sampleRateHertz !== null) {
+    config.sampleRateHertz = sampleRateHertz;
+    console.log(`Using sample rate: ${sampleRateHertz} Hz`);
+  } else {
+    console.log("Omitting sample rate to let Google Speech API detect it from the audio header");
+  }
+
+  const request = {
+    audio: audio,
+    config: config,
+  };
+
+  try {
+    console.log("Starting long-running transcription job...");
+
+    // Start the asynchronous recognition
+    const [operation] = await client.longRunningRecognize(request);
+
+    // Wait for operation to complete
+    console.log("Waiting for operation to complete... This may take several minutes for long files.");
+    const [response] = await operation.promise();
+
+    if (!response.results || response.results.length === 0) {
+      console.log("No transcription results received");
+      return "";
+    }
+
+    console.log(`Received ${response.results.length} results from long-running transcription`);
+
+    // Combine all transcription results
+    return response.results
+      .map((result: any) => result.alternatives?.[0]?.transcript || "")
+      .join("\n");
+  } catch (error: any) {
+    console.error(`Google Speech LongRunningRecognize error: ${error.message}`);
+
+    // If we get an encoding error, try again with LINEAR16 encoding
+    if (error.message.includes('encoding') && encoding !== "LINEAR16") {
+      console.log("Encoding error detected, retrying with LINEAR16 encoding");
+      return transcribeGcsAudioWithLongRunningRecognize(audioUrl, "LINEAR16", null);
+    }
+
+    throw error;
+  }
+};
+
+// Function to directly transcribe video using Video Intelligence API
+const transcribeVideoDirectly = async (videoUrl: string): Promise<string> => {
+  console.log(`Directly transcribing video with Video Intelligence API: ${videoUrl}`);
+
+  // Create a client
+  const videoIntelligenceClient = new VideoIntelligenceServiceClient({
+    keyFilename: GOOGLE_CREDENTIALS_PATH,
+  });
+
+  // Parse the GCS URL
+  const { bucket, path } = parseGcsUrl(videoUrl);
+  const gcsUri = `gs://${bucket}/${path}`;
+
+  try {
+    // Configure the request
+    const request = {
+      inputUri: gcsUri,
+      features: [protos.google.cloud.videointelligence.v1.Feature.SPEECH_TRANSCRIPTION],
+      videoContext: {
+        speechTranscriptionConfig: {
+          languageCode: 'en-US',
+          enableAutomaticPunctuation: true,
+          // Use enhanced model for better accuracy
+          model: 'default',
+          // Enable word-level confidence
+          enableWordConfidence: true,
+        },
+      },
+    };
+
+    console.log("Starting video transcription operation...");
+
+    // Start the asynchronous annotation
+    const operationResponse = await videoIntelligenceClient.annotateVideo(request);
+    const operation = operationResponse[0];
+
+    console.log("Waiting for operation to complete... This may take several minutes for long videos.");
+    const [operationResult] = await operation.promise();
+
+    // Get the first result
+    if (!operationResult.annotationResults || operationResult.annotationResults.length === 0) {
+      throw new Error("No annotation results found in the video");
+    }
+
+    const annotation = operationResult.annotationResults[0];
+
+    if (!annotation.speechTranscriptions || annotation.speechTranscriptions.length === 0) {
+      throw new Error("No speech transcriptions found in the video");
+    }
+
+    console.log(`Received ${annotation.speechTranscriptions.length} speech transcriptions`);
+
+    // Combine all transcriptions
+    let transcript = "";
+    annotation.speechTranscriptions.forEach((speechTranscription: any) => {
+      if (speechTranscription.alternatives && speechTranscription.alternatives.length > 0) {
+        // Get the alternative with the highest confidence
+        const bestAlternative = speechTranscription.alternatives.reduce(
+          (best: any, current: any) => {
+            return (current.confidence || 0) > (best.confidence || 0) ? current : best;
+          },
+          speechTranscription.alternatives[0]
+        );
+
+        if (bestAlternative.transcript) {
+          transcript += bestAlternative.transcript + " ";
+        }
+      }
+    });
+
+    return transcript.trim();
+  } catch (error: any) {
+    console.error(`Video Intelligence API error: ${error.message}`);
+    throw error;
+  }
+};
+
 export const transcribe = async (audioFilePath: string): Promise<string> => {
   console.log(GOOGLE_CREDENTIALS_PATH, "Hello");
 
   // Check if the path is a URL
-  const isUrl = audioFilePath.startsWith('http://') || audioFilePath.startsWith('https://');
+  const isUrl = audioFilePath.startsWith('http://') || audioFilePath.startsWith('https://') || audioFilePath.startsWith('gs://');
 
   // For local files, check if they exist
   if (!isUrl && !fs.existsSync(audioFilePath)) {
     throw new Error(`Audio file not found: ${audioFilePath}`);
   }
+
+  // Determine if this is a video file
+  const isVideo = (
+    audioFilePath.toLowerCase().endsWith('.mp4') ||
+    audioFilePath.toLowerCase().endsWith('.mov') ||
+    audioFilePath.toLowerCase().endsWith('.avi') ||
+    audioFilePath.toLowerCase().endsWith('.webm') ||
+    audioFilePath.toLowerCase().endsWith('.mkv')
+  );
 
   // For URLs, we need to handle them in chunks
   // For local files, we can use ffprobe to determine duration
@@ -236,6 +462,36 @@ export const transcribe = async (audioFilePath: string): Promise<string> => {
   let transcript = "";
 
   try {
+    // Special handling for GCS URLs
+    if (isUrl && (audioFilePath.startsWith('gs://') || audioFilePath.startsWith('https://storage.googleapis.com/'))) {
+      console.log("GCS URL detected, using cloud-native approach");
+
+      // If it's a video, try direct transcription first
+      if (isVideo) {
+        console.log("Video file detected, attempting direct transcription with Video Intelligence API");
+        try {
+          transcript = await transcribeVideoDirectly(audioFilePath);
+          console.log("Direct video transcription successful");
+          return transcript.trim();
+        } catch (videoTranscriptionError: any) {
+          console.log(`Direct video transcription failed: ${videoTranscriptionError.message}`);
+          console.log("Falling back to audio extraction method");
+
+          // Fall back to audio extraction method
+          const audioUrl = await requestCloudAudioExtraction(audioFilePath);
+          console.log(`Audio extracted to: ${audioUrl}`);
+
+          // Transcribe the extracted audio using longRunningRecognize
+          transcript = await transcribeGcsAudioWithLongRunningRecognize(audioUrl);
+        }
+      } else {
+        // For audio files in GCS, use longRunningRecognize directly
+        transcript = await transcribeGcsAudioWithLongRunningRecognize(audioFilePath);
+      }
+
+      return transcript.trim();
+    }
+
     if (isUrl) {
       // For URLs, we need to process the audio in chunks using byte range requests
       console.log("Processing URL in chunks using byte range requests");

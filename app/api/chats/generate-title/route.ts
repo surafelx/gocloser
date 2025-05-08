@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a title using Gemini
-    const prompt = `Based on this conversation, generate a very short, concise title (maximum 5 words) that captures the main topic. Don't use quotes or special characters. The title should be simple and descriptive. Here's the conversation: ${userMessages}`;
+    const prompt = `Based on this conversation, generate a very short, concise title (maximum 5 words) that captures the main topic. Don't use quotes or special characters. The title should be simple and descriptive. The title should be specific to the conversation content, not generic like "Sales Discussion" or "Chat Conversation". Here's the conversation: ${userMessages}`;
 
     console.log('Generating title for chat...');
     const result = await generateGeminiResponse(prompt, [], 'chat');

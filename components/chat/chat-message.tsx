@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { cn } from '@/lib/utils';
-import { BotAvatar } from '@/components/chat/bot-avatar';
-import { UserAvatar } from '@/components/chat/user-avatar';
-import { MarkdownMessage } from '@/components/chat/markdown-message';
-import { PerformanceAnalysis } from '@/components/chat/performance-analysis';
-import { MessageActions } from '@/components/chat/message-actions';
-import { TypingAnimation } from '@/components/chat/typing-animation';
+import { cn } from "@/lib/utils";
+import { BotAvatar } from "@/components/chat/bot-avatar";
+import { UserAvatar } from "@/components/chat/user-avatar";
+import { MarkdownMessage } from "@/components/chat/markdown-message";
+import { PerformanceAnalysis } from "@/components/chat/performance-analysis";
+import { MessageActions } from "@/components/chat/message-actions";
+import { TypingAnimation } from "@/components/chat/typing-animation";
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
-  attachmentType?: 'audio' | 'video' | 'text';
+  attachmentType?: "audio" | "video" | "text";
   attachmentName?: string;
   isAnalysis?: boolean;
   performanceData?: {
@@ -39,68 +39,75 @@ interface ChatMessageProps {
 
 export function ChatMessage({
   message,
-  isLoading, // Used for loading state
-  onShowPerformance
+  isLoading,
+  onShowPerformance,
 }: ChatMessageProps) {
-  // Ensure we're correctly identifying user messages
-  // This is critical for proper display
-  const isUser = message.role === 'user';
+  // Create a local copy of the message to avoid modifying the original
+  const messageWithValidRole = { ...message };
 
-  console.log('Rendering ChatMessage:', message.id, message.role, message.content.substring(0, 30), 'isUser:', isUser);
-
-  // For debugging - log the exact message object
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`[DEBUG-CHAT-MESSAGE] Message ${message.id}:`, {
-      role: message.role,
-      isUser,
-      isLoading,
-      content: message.content.substring(0, 50) + '...'
-    });
+  // Ensure the message has a valid role
+  if (
+    !messageWithValidRole.role ||
+    (messageWithValidRole.role !== "user" &&
+      messageWithValidRole.role !== "assistant" &&
+      messageWithValidRole.role !== "system")
+  ) {
+    // Determine role based on ID pattern
+    if (messageWithValidRole.id.startsWith("msg_")) {
+      messageWithValidRole.role = "user";
+    } else {
+      messageWithValidRole.role = "assistant";
+    }
+    console.warn(
+      `[CHAT-MESSAGE] Invalid role detected for message ${messageWithValidRole.id}, defaulting to '${messageWithValidRole.role}'`
+    );
   }
 
-  // Force role to be either 'user' or 'assistant' if it's not set correctly
-  if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system') {
-    console.warn(`[CHAT-MESSAGE] Invalid role detected: ${message.role}, defaulting to 'assistant'`);
-    message.role = 'assistant';
-  }
-
-  // Use isLoading to determine if we should show a loading state
-  const showLoading = isLoading && message.id.startsWith('loading');
+  // Determine if this is a user message
+  const isUser = messageWithValidRole.role === "user";
+  // Only show loading animation for messages with loading- prefix or if this is the latest assistant message and isLoading is true
+  const isLoadingMessage = messageWithValidRole.id.startsWith("loading-");
+  const showLoading = (isLoading && !isUser && isLoadingMessage) || isLoadingMessage;
 
   return (
-    <div className={cn(
-      'group flex items-start gap-x-3 py-3 w-full',
-      isUser ? 'justify-end' : 'justify-start'
-    )}>
+    <div
+      className={cn(
+        "group flex items-start gap-3 py-4",
+        isUser ? "justify-end" : "justify-start"
+      )}
+    >
       {!isUser && <BotAvatar />}
-      <div className={cn(
-        'rounded-md px-4 py-2.5 max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl text-sm',
-        isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
-      )}>
-        {message.attachmentType && (
-          <div className="mb-2 text-xs border-l-2 border-primary/30 pl-2 py-1 bg-primary/5 rounded">
-            <span className="font-medium">Attached {message.attachmentType} file:</span> {message.attachmentName}
-          </div>
+      <div
+        className={cn(
+          "flex flex-col space-y-2 max-w-[80%] sm:max-w-[70%]",
+          isUser
+            ? "items-end bg-primary/10 text-primary-foreground rounded-2xl rounded-tr-none p-4"
+            : "items-start bg-muted rounded-2xl rounded-tl-none p-4"
         )}
-
-        {showLoading || (message.id.startsWith('loading-') && !isUser) ? (
+      >
+        {showLoading ||
+        (messageWithValidRole.id.startsWith("loading-") && !isUser) ? (
           <TypingAnimation />
-        ) : message.isAnalysis ? (
-          <PerformanceAnalysis performanceData={message.performanceData} fileName={message.attachmentName} fileType={message.attachmentType} />
+        ) : messageWithValidRole.isAnalysis ? (
+          <PerformanceAnalysis
+            performanceData={messageWithValidRole.performanceData}
+            fileName={messageWithValidRole.attachmentName}
+            fileType={messageWithValidRole.attachmentType}
+          />
         ) : (
-          <MarkdownMessage content={message.content} />
+          <MarkdownMessage content={messageWithValidRole.content} />
         )}
 
         {!isUser && (
           <MessageActions
             onCopy={() => {
-              navigator.clipboard.writeText(message.content);
+              navigator.clipboard.writeText(messageWithValidRole.content);
             }}
-            hasAnalysis={!!message.performanceData}
-            performanceData={message.performanceData}
-            attachmentName={message.attachmentName}
-            attachmentType={message.attachmentType}
-            onViewAnalysis={() => onShowPerformance?.(message)}
+            hasAnalysis={!!messageWithValidRole.performanceData}
+            performanceData={messageWithValidRole.performanceData}
+            attachmentName={messageWithValidRole.attachmentName}
+            attachmentType={messageWithValidRole.attachmentType}
+            onViewAnalysis={() => onShowPerformance?.(messageWithValidRole)}
           />
         )}
       </div>
