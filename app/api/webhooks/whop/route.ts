@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Parse the webhook payload
     const event = JSON.parse(body);
-    
+
     // Connect to database
     await connectToDatabase();
 
@@ -53,6 +53,8 @@ export async function POST(request: NextRequest) {
         break;
     }
 
+    // Note: We can't set cookies in webhook responses as they're server-to-server
+    // Cookies will be set when the user next checks their subscription status
     return NextResponse.json({ received: true });
   } catch (error: any) {
     console.error('Error handling webhook:', error);
@@ -88,10 +90,10 @@ async function handleMembershipCreated(membership: any) {
 
     // Get plan details
     const plan = getPlanByWhopPlanId(membership.plan.id);
-    
+
     // Check if subscription already exists
     const existingSubscription = await Subscription.findOne({ userId });
-    
+
     if (existingSubscription) {
       // Update existing subscription
       existingSubscription.whopUserId = membership.user.id;
@@ -104,7 +106,7 @@ async function handleMembershipCreated(membership: any) {
       existingSubscription.currentPeriodEnd = new Date(membership.current_period_end);
       existingSubscription.cancelAtPeriodEnd = membership.cancel_at_period_end || false;
       existingSubscription.tokenLimit = plan.tokenLimit;
-      
+
       await existingSubscription.save();
     } else {
       // Create new subscription
@@ -122,10 +124,10 @@ async function handleMembershipCreated(membership: any) {
         tokenLimit: plan.tokenLimit,
         tokensUsed: 0,
       });
-      
+
       await newSubscription.save();
     }
-    
+
     // Update user's subscription status
     await User.updateOne(
       { _id: userId },
@@ -148,13 +150,13 @@ async function handleMembershipUpdated(membership: any) {
 
     // Get plan details
     const plan = getPlanByWhopPlanId(membership.plan.id);
-    
+
     // Update subscription
-    const subscription = await Subscription.findOne({ 
+    const subscription = await Subscription.findOne({
       userId: user._id,
       whopMembershipId: membership.id
     });
-    
+
     if (subscription) {
       subscription.planId = plan.id;
       subscription.planName = plan.name;
@@ -163,9 +165,9 @@ async function handleMembershipUpdated(membership: any) {
       subscription.currentPeriodEnd = new Date(membership.current_period_end);
       subscription.cancelAtPeriodEnd = membership.cancel_at_period_end || false;
       subscription.tokenLimit = plan.tokenLimit;
-      
+
       await subscription.save();
-      
+
       // Update user's subscription status
       await User.updateOne(
         { _id: user._id },
@@ -186,18 +188,18 @@ async function handleMembershipCanceled(membership: any) {
       console.error(`User not found for Whop user ID: ${membership.user.id}`);
       return;
     }
-    
+
     // Update subscription
     await Subscription.updateOne(
       { userId: user._id, whopMembershipId: membership.id },
-      { 
-        $set: { 
+      {
+        $set: {
           status: 'canceled',
           cancelAtPeriodEnd: true
-        } 
+        }
       }
     );
-    
+
     // Update user's subscription status
     await User.updateOne(
       { _id: user._id },
@@ -217,13 +219,13 @@ async function handlePaymentSucceeded(payment: any) {
       console.error(`User not found for Whop user ID: ${payment.user.id}`);
       return;
     }
-    
+
     // Get membership details
     const membership = payment.membership;
-    
+
     // Get plan details
     const plan = getPlanByWhopPlanId(membership.plan.id);
-    
+
     // Create payment record
     const existingPayment = await Payment.findOne({ whopPaymentId: payment.id });
     if (!existingPayment) {
@@ -244,15 +246,15 @@ async function handlePaymentSucceeded(payment: any) {
         receiptUrl: payment.receipt_url || '',
         createdAt: new Date(payment.created_at),
       });
-      
+
       await newPayment.save();
     }
-    
+
     // Reset token usage if this is a renewal payment
     if (payment.type === 'renewal') {
       await resetTokenUsage(user._id.toString());
     }
-    
+
     // Update user's subscription status
     await User.updateOne(
       { _id: user._id },
@@ -272,10 +274,10 @@ async function handlePaymentFailed(payment: any) {
       console.error(`User not found for Whop user ID: ${payment.user.id}`);
       return;
     }
-    
+
     // Get membership details
     const membership = payment.membership;
-    
+
     // Update subscription status
     await Subscription.updateOne(
       { userId: user._id, whopMembershipId: membership.id },

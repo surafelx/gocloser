@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
       if (user && user.email === "admin@gocloser.me") {
         // Admin gets the free plan
         const freePlan = getPlanById("free");
-        return NextResponse.json({
+
+        // Create response with admin subscription
+        const response = NextResponse.json({
           subscription: {
             planId: "free",
             planName: freePlan.name,
@@ -51,11 +53,24 @@ export async function GET(request: NextRequest) {
             tokensUsed: 0,
           },
         });
+
+        // Set admin cookie
+        response.cookies.set("is_admin", "true", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60, // 30 days
+        });
+
+        return response;
       }
 
       // For all other users, return the starter plan details with a flag indicating they need to subscribe
       const starterPlan = getPlanById("starter");
-      return NextResponse.json({
+
+      // Create response with subscription needed flag
+      const response = NextResponse.json({
         subscription: {
           planId: "starter",
           planName: starterPlan.name,
@@ -67,9 +82,31 @@ export async function GET(request: NextRequest) {
           needsSubscription: true, // Flag to indicate user needs to subscribe
         },
       });
+
+      // Remove any subscription cookies
+      response.cookies.delete("has_subscription");
+
+      return response;
     }
 
-    return NextResponse.json({ subscription });
+    // Create response with subscription details
+    const response = NextResponse.json({ subscription });
+
+    // Set subscription cookie if user has an active subscription
+    if (subscription.status === "active") {
+      response.cookies.set("has_subscription", "true", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      });
+    } else {
+      // Remove subscription cookie if subscription is not active
+      response.cookies.delete("has_subscription");
+    }
+
+    return response;
   } catch (error: any) {
     console.error("Error getting subscription:", error);
     return NextResponse.json(

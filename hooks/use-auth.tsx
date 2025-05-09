@@ -79,7 +79,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         title: 'Login successful',
         description: 'Welcome back!',
       });
-      router.push('/chat');
+
+      // Check if user has an active subscription
+      try {
+        const subResponse = await fetch('/api/billing/subscription');
+        const subData = await subResponse.json();
+
+        // If user needs a subscription, redirect to billing page
+        if (subData.subscription?.needsSubscription) {
+          router.push('/billing');
+        } else {
+          router.push('/chat');
+        }
+      } catch (err) {
+        // Default to chat page if subscription check fails
+        router.push('/chat');
+      }
     } catch (error: any) {
       toast({
         title: 'Login failed',
@@ -115,7 +130,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         title: 'Account created successfully',
         description: 'Welcome to GoCloser!',
       });
-      router.push('/chat');
+
+      // New users should always be directed to the billing page
+      router.push('/billing');
     } catch (error: any) {
       toast({
         title: 'Signup failed',
@@ -175,7 +192,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         title: 'Google authentication successful',
         description: 'Welcome to GoCloser!',
       });
-      router.push('/chat');
+
+      // Check if user has an active subscription
+      try {
+        const subResponse = await fetch('/api/billing/subscription');
+        const subData = await subResponse.json();
+
+        // If user needs a subscription, redirect to billing page
+        if (subData.subscription?.needsSubscription) {
+          router.push('/billing');
+        } else {
+          router.push('/chat');
+        }
+      } catch (err) {
+        // Default to chat page if subscription check fails
+        router.push('/chat');
+      }
     } catch (error: any) {
       toast({
         title: 'Google authentication failed',
