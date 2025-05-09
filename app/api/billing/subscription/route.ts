@@ -31,18 +31,40 @@ export async function GET(request: NextRequest) {
       userId: currentUser.id || currentUser.userId,
     });
 
-    // If no subscription found, return free plan details
+    // If no subscription found, check if user is admin@gocloser.me
     if (!subscription) {
-      const freePlan = getPlanById("free");
+      // Get user details
+      const user = await User.findById(currentUser.id || currentUser.userId);
+
+      // Check if user is admin@gocloser.me
+      if (user && user.email === "admin@gocloser.me") {
+        // Admin gets the free plan
+        const freePlan = getPlanById("free");
+        return NextResponse.json({
+          subscription: {
+            planId: "free",
+            planName: freePlan.name,
+            status: "active",
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            tokenLimit: freePlan.tokenLimit,
+            tokensUsed: 0,
+          },
+        });
+      }
+
+      // For all other users, return the starter plan details with a flag indicating they need to subscribe
+      const starterPlan = getPlanById("starter");
       return NextResponse.json({
         subscription: {
-          planId: "free",
-          planName: freePlan.name,
-          status: "active",
+          planId: "starter",
+          planName: starterPlan.name,
+          status: "inactive",
           currentPeriodEnd: null,
           cancelAtPeriodEnd: false,
-          tokenLimit: freePlan.tokenLimit,
+          tokenLimit: starterPlan.tokenLimit,
           tokensUsed: 0,
+          needsSubscription: true, // Flag to indicate user needs to subscribe
         },
       });
     }
@@ -111,9 +133,10 @@ export async function POST(request: NextRequest) {
 
     // Create a checkout link with Whop
     try {
+      const userId = user._id ? user._id.toString() : currentUser.id || currentUser.userId;
       const checkoutUrl = await createCheckoutLink(
         planId,
-        user._id.toString(),
+        userId,
         user.email
       );
 

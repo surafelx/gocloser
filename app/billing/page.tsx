@@ -280,8 +280,8 @@ function BillingPageContent() {
     });
   };
 
-  // Get all plans
-  const allPlans = Object.values(SUBSCRIPTION_PLANS);
+  // Get all plans (excluding hidden plans)
+  const allPlans = Object.values(SUBSCRIPTION_PLANS).filter(plan => !plan.isHidden);
 
   return (
     <AppLayout>
@@ -309,6 +309,26 @@ function BillingPageContent() {
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
+                  </CardContent>
+                </Card>
+              ) : subscription?.needsSubscription ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Subscription Required</CardTitle>
+                    <CardDescription>
+                      You need to subscribe to a plan to continue using GoCloser
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Alert className="mb-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <div className="ml-3">
+                        <AlertTitle className="text-amber-800 dark:text-amber-300">Subscription Required</AlertTitle>
+                        <AlertDescription className="text-amber-700 dark:text-amber-400">
+                          Please select one of the plans below to continue using GoCloser. Free trial is no longer available.
+                        </AlertDescription>
+                      </div>
+                    </Alert>
                   </CardContent>
                 </Card>
               ) : subscription ? (

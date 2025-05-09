@@ -54,7 +54,7 @@ export async function createChatSession(
       temperature: 0.7,
       topP: 0.95,
       topK: 40,
-      maxOutputTokens: 768, // Reduced from 1024 to encourage even shorter responses
+      maxOutputTokens: 512, // Further reduced to enforce very concise responses
     },
   });
 }
@@ -253,7 +253,7 @@ export async function generateMultiModalResponse(
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 768, // Reduced from 1024 to encourage even shorter responses
+        maxOutputTokens: 512, // Further reduced to enforce very concise responses
       },
     });
 
@@ -329,7 +329,7 @@ IMPORTANT: You must respond with ONLY a JSON object in this exact format, with n
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 768,
+        maxOutputTokens: 512,
       },
     });
 

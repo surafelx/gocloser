@@ -38,19 +38,20 @@ try {
 
 // Define subscription plans
 export const SUBSCRIPTION_PLANS = {
+  // FREE plan is kept internally for admin@gocloser.me only
   FREE: {
     id: "free",
-    name: "Free",
-    description: "Chat + Uploads Only",
+    name: "Admin",
+    description: "Admin Access Only",
     price: 0,
     priceId: "", // No Stripe price ID for free plan
-    tokenLimit: 10000, // 10k tokens for free users
+    tokenLimit: 1000000, // 1M tokens for admin
     features: [
-      "Gemini chat from file uploads",
-      "10K tokens",
-      "No voice support",
+      "Admin access only",
+      "Not available to regular users",
     ],
-    hasVoiceSupport: false,
+    hasVoiceSupport: true,
+    isHidden: true, // Flag to hide this plan from UI
   },
   STARTER: {
     id: "starter",
@@ -87,15 +88,25 @@ export const SUBSCRIPTION_PLANS = {
 
 // Helper function to get plan details by ID
 export function getPlanById(planId: string) {
+  // Special case for admin@gocloser.me
+  if (planId === "free") {
+    return SUBSCRIPTION_PLANS.FREE;
+  }
+
   const plans = Object.values(SUBSCRIPTION_PLANS);
-  return plans.find((plan) => plan.id === planId) || SUBSCRIPTION_PLANS.FREE;
+  return plans.find((plan) => plan.id === planId) || SUBSCRIPTION_PLANS.STARTER;
 }
 
 // Helper function to get plan details by Stripe Price ID
 export function getPlanByPriceId(priceId: string) {
+  // Special case for admin@gocloser.me
+  if (priceId === SUBSCRIPTION_PLANS.FREE.priceId) {
+    return SUBSCRIPTION_PLANS.FREE;
+  }
+
   const plans = Object.values(SUBSCRIPTION_PLANS);
   return (
-    plans.find((plan) => plan.priceId === priceId) || SUBSCRIPTION_PLANS.FREE
+    plans.find((plan) => plan.priceId === priceId) || SUBSCRIPTION_PLANS.STARTER
   );
 }
 

@@ -503,7 +503,7 @@ export function ChatSidebar() {
     <>
       {/* Minimized sidebar for mobile - only shows when sidebar is closed */}
       {!isOpen && isMobile && (
-        <div className="flex flex-col h-full border-r border-border/40 bg-muted/50 backdrop-blur transition-all duration-300 w-14 absolute left-0 top-12 z-10">
+        <div className="flex flex-col h-full border-r border-border/40 bg-muted/50 backdrop-blur transition-all duration-300 w-14 absolute left-0 top-qw z-10">
           <div className="flex flex-col h-full">
             {/* Toggle button */}
             <div className="flex justify-center p-3">
@@ -555,7 +555,7 @@ export function ChatSidebar() {
 
       {/* Full sidebar */}
       <div
-        className={`flex flex-col h-full border-r border-border/40 bg-muted/50 backdrop-blur transition-all duration-300 ${
+        className={`mt-20 flex flex-col h-full border-r border-border/40 bg-muted/50 backdrop-blur transition-all duration-300 ${
           isOpen
             ? isMobile
               ? "w-full sm:w-80 absolute left-0 top-12 z-40 max-h-[calc(100vh-3rem)] overflow-hidden"

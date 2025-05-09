@@ -90,7 +90,29 @@ export async function updateTokenUsage(
 
     // Get user to check subscription status
     const user = await User.findById(userId);
+
+    // Check if user is admin@gocloser.me
+    const isAdmin = user?.email === "admin@gocloser.me";
     const hasActiveSubscription = user?.hasActiveSubscription || false;
+
+    // If user is admin@gocloser.me, always allow token usage
+    if (isAdmin) {
+      console.log(`User ${userId} is admin@gocloser.me - allowing unlimited token usage`);
+
+      // Create a token usage record for tracking purposes
+      const tokenUsage = new TokenUsage({
+        userId,
+        messageId: Date.now().toString(),
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        estimatedCost: calculateCost(promptTokens, completionTokens),
+        model: 'gemini-pro',
+      });
+
+      await tokenUsage.save();
+      return { success: true };
+    }
 
     // If they have an active subscription, update token usage
     if (subscription) {
@@ -246,6 +268,21 @@ export async function getTokenUsageStats(userId: string) {
 
     // Get user to check subscription status
     const user = await User.findById(userId);
+
+    // Check if user is admin@gocloser.me
+    if (user && user.email === "admin@gocloser.me") {
+      console.log(`User ${userId} is admin@gocloser.me - providing admin stats`);
+      return {
+        planId: "free",
+        planName: "Admin",
+        tokenLimit: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+        tokensUsed: 0, // Admin doesn't count tokens
+        tokensRemaining: SUBSCRIPTION_PLANS.FREE.tokenLimit,
+        percentageUsed: 0,
+        hasActiveSubscription: true,
+        isAdmin: true
+      };
+    }
 
     // If user doesn't exist, create a default user record with free plan
     if (!user) {
